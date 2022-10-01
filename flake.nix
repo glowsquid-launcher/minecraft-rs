@@ -17,13 +17,13 @@
     };
 
     rust-overlay = {
-       url = "github:oxalica/rust-overlay";
-       inputs = {
-         nixpkgs.follows = "nixpkgs";
-         flake-utils.follows = "flake-utils";
-       };
-     };  
-   };
+      url = "github:oxalica/rust-overlay";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-utils.follows = "flake-utils";
+      };
+    };
+  };
 
   outputs = { self, nixpkgs, crane, flake-utils, advisory-db, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (system:
@@ -37,7 +37,7 @@
 
 
         rustTC = pkgs.rust-bin.stable.latest.default.override {
-          extensions = [ "rustfmt" "rust-analyzer" "rust-src"];
+          extensions = [ "rustfmt" "rust-analyzer" "rust-src" ];
         };
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustTC;
@@ -97,14 +97,25 @@
           drv = copper;
         };
 
-        devShells.default = pkgs.mkShell {
+        devShells.default = pkgs.mkShell rec {
           inputsFrom = builtins.attrValues self.checks;
 
           # Extra inputs can be added here
           nativeBuildInputs = with pkgs; [
             rustTC
             rnix-lsp
+            pkg-config
+            fontconfig
+
+            xorg.libX11
+            xorg.libX11.dev
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            libGL
           ];
+
+          LD_LIBRARY_PATH = "${lib.makeLibraryPath nativeBuildInputs}";
         };
       });
 }
