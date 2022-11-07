@@ -279,69 +279,69 @@ mod tests {
     }
 
     // #[tokio::test]
-    // async fn test_full_flow() {
-    //     let auth = Auth {
-    //         client_id: "2aa32806-92e3-4242-babc-392ac0f0fd30".to_string(),
-    //         http_client: Client::new(),
-    //     };
+    async fn test_full_flow() {
+        let auth = Auth {
+            client_id: "2aa32806-92e3-4242-babc-392ac0f0fd30".to_string(),
+            http_client: Client::new(),
+        };
 
-    //     let code = auth.create_device_code().await.unwrap();
-    //     println!("Code: {} | Goto: {}", code.user_code, code.verification_uri);
+        let code = auth.create_device_code().await.unwrap();
+        println!("Code: {} | Goto: {}", code.user_code, code.verification_uri);
 
-    //     let stream = auth.pull_for_auth(&code);
-    //     pin_mut!(stream);
+        let stream = auth.pull_for_auth(&code);
+        pin_mut!(stream);
 
-    //     let auth_token = 'block: {
-    //         while let Some(v) = stream.next().await {
-    //             println!("{:?}", v);
-    //             match v.unwrap() {
-    //                 AuthTokenRes::ExpectedError(_) => continue,
-    //                 AuthTokenRes::Token(token) => break 'block token,
-    //             }
-    //         }
+        let auth_token = 'block: {
+            while let Some(v) = stream.next().await {
+                println!("{:?}", v);
+                match v.unwrap() {
+                    AuthTokenRes::ExpectedError(_) => continue,
+                    AuthTokenRes::Token(token) => break 'block token,
+                }
+            }
 
-    //         panic!("Could not get token");
-    //     };
+            panic!("Could not get token");
+        };
 
-    //     println!("{:?}", auth_token);
+        println!("{:?}", auth_token);
 
-    //     let xbl_token = auth
-    //         .authenticate_xbox_live(&auth_token)
-    //         .await
-    //         .expect("Could not authenticate with xbox live");
+        let xbl_token = auth
+            .authenticate_xbox_live(&auth_token)
+            .await
+            .expect("Could not authenticate with xbox live");
 
-    //     println!("{:?}", xbl_token);
+        println!("{:?}", xbl_token);
 
-    //     let xsts_token = auth
-    //         .get_xsts_token(&xbl_token)
-    //         .await
-    //         .expect("Could not get xsts token");
+        let xsts_token = auth
+            .get_xsts_token(&xbl_token)
+            .await
+            .expect("Could not get xsts token");
 
-    //     println!("{:?}", xsts_token);
+        println!("{:?}", xsts_token);
 
-    //     let minecraft_token = auth
-    //         .get_minecraft_token(&xsts_token)
-    //         .await
-    //         .expect("Could not get minecraft token");
+        let minecraft_token = auth
+            .get_minecraft_token(&xsts_token)
+            .await
+            .expect("Could not get minecraft token");
 
-    //     println!("{:?}", minecraft_token);
+        println!("{:?}", minecraft_token);
 
-    //     let owns_minecraft = auth
-    //         .verify_minecraft_ownership(&minecraft_token)
-    //         .await
-    //         .expect("Could not verify minecraft ownership");
+        let owns_minecraft = auth
+            .verify_minecraft_ownership(&minecraft_token)
+            .await
+            .expect("Could not verify minecraft ownership");
 
-    //     if owns_minecraft {
-    //         println!("User owns minecraft");
-    //     } else {
-    //         panic!("User does not own minecraft");
-    //     }
+        if owns_minecraft {
+            println!("User owns minecraft");
+        } else {
+            panic!("User does not own minecraft");
+        }
 
-    //     let minecraft_profile = auth
-    //         .get_minecraft_profile(&minecraft_token)
-    //         .await
-    //         .expect("Could not get minecraft profile");
+        let minecraft_profile = auth
+            .get_minecraft_profile(&minecraft_token)
+            .await
+            .expect("Could not get minecraft profile");
 
-    //     println!("{:?}", minecraft_profile);
-    // }
+        println!("{:?}", minecraft_profile);
+    }
 }
