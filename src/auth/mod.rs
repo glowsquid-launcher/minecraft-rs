@@ -216,7 +216,6 @@ impl Auth {
 
 #[cfg(test)]
 mod tests {
-    use futures::{pin_mut, StreamExt};
     use reqwest::Client;
 
     use super::*;

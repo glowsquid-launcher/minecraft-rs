@@ -24,6 +24,7 @@ Downloading and launching, ditto.
 Currently, this is being used as the launcher backend for the glowsquid launcher.
 
 ## Features
+
 - [x] can actually download minecraft
 - [x] parses version manifests for you
 - [x] proper error handling
