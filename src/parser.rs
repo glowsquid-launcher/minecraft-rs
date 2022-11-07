@@ -266,7 +266,7 @@ impl JavaArguments {
                     }
                 }
             }
-            Action::Disallow => return Err(JavaArgumentsError::NoDissalows),
+            Action::Disallow => return Err(JavaArgumentsError::NoDisallows),
         }
         Ok(current_allow)
     }

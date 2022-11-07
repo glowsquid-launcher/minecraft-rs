@@ -1,5 +1,11 @@
 {
-	"conventionalCommits.scopes": ["deps", "assets", "standalone", "structs/version"],
+	"conventionalCommits.scopes": [
+		"deps",
+		"assets",
+		"standalone",
+		"structs/version",
+		"auth"
+	],
 	"files.exclude": {
 		"**/.git": true,
 		"**/.svn": true,
@@ -10,5 +16,13 @@
 		"**/target": true,
 		"target": true
 	},
-	"explorerExclude.backup": null
+	"explorerExclude.backup": null,
+	"cSpell.words": [
+		"Minecraft",
+		"minecraftservices",
+		"reqwest",
+		"xboxlive",
+		"Xsts"
+	],
+	"cSpell.language": "en-GB"
 }

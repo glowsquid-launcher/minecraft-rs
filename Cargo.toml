@@ -15,17 +15,22 @@ categories = ["api-bindings"]
 [dependencies]
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
-tokio = { version = "1.21.2", features = [
-  "fs",
-  "process",
+tokio = { version = "1.21.2", features = ["fs", "process", "macros"] }
+reqwest = { version = "0.11.12", default-features = false, features = [
+  "json",
+  "stream",
+  "rustls-tls",
 ] }
-reqwest = { version = "0.11.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 tokio-retry = "0.3"
-futures = "0.3.24"
+futures = "0.3.25"
 tracing = "0.1.36"
 dunce = "1.0.2"
 thiserror = "1.0.37"
 itertools = "0.10.5"
+url = "2.3.1"
+async-stream = "0.3.3"
+serde_repr = "0.1.9"
+jwt-simple = "0.11.2"
 
 # why do you have to do this mojang
 [target.'cfg(target_os = "windows")'.dependencies]

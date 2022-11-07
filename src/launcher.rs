@@ -67,6 +67,8 @@ pub struct Launcher {
     pub java_path: PathBuf,
     /// the launcher name (e.g glowsquid)
     pub launcher_name: String,
+    /// The reqwest client
+    pub http_client: reqwest::Client,
 }
 
 impl Launcher {
@@ -74,7 +76,6 @@ impl Launcher {
     pub async fn launch(
         &self,
         version_manifest: Option<Version>,
-        client: reqwest::Client,
     ) -> Result<GameOutput, LauncherError> {
         trace!("Launching minecraft");
 
@@ -88,7 +89,7 @@ impl Launcher {
         let game_args = self.parse_game_arguments(&version_manifest)?;
         debug!("Game arguments: {:?}", &game_args);
 
-        let java_args = self.parse_java_arguments(&version_manifest, client).await?;
+        let java_args = self.parse_java_arguments(&version_manifest).await?;
 
         let main_class = version_manifest
             .main_class
@@ -132,7 +133,6 @@ impl Launcher {
     async fn parse_java_arguments(
         &self,
         version_manifest: &Version,
-        client: reqwest::Client,
     ) -> Result<Vec<String>, LauncherError> {
         let mut args: Vec<String> = vec![];
 
@@ -150,7 +150,7 @@ impl Launcher {
                         self,
                         version_manifest,
                         argument,
-                        client.clone(),
+                        self.http_client.clone(),
                     )
                     .await?
                 }
@@ -159,7 +159,7 @@ impl Launcher {
                         self,
                         version_manifest,
                         argument.to_string(),
-                        client.clone(),
+                        self.http_client.clone(),
                     )
                     .await?,
                 ),

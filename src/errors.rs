@@ -1,3 +1,7 @@
+use std::fmt::{Display, Formatter};
+
+use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -138,7 +142,7 @@ pub enum JavaArgumentsError {
     #[error("java_arguments.no_libs_path")]
     /// No lib path was found
     ///
-    /// this _shouldnt_ happen, but incase it does, this exists
+    /// this _shouldn't_ happen, but in case it does, this exists
     NoLibsPath,
 
     #[error("java_arguments.unrecognised_os")]
@@ -153,14 +157,14 @@ pub enum JavaArgumentsError {
     /// An error happened during creating a library download from a maven url
     LibraryDownloadError(#[from] CreateLibraryDownloadError),
 
-    #[error("java_arguments.no_dissalows")]
+    #[error("java_arguments.no_disallows")]
     /// No disallows are currently implemented. Please file a bug if this error happens
-    NoDissalows,
+    NoDisallows,
 
     #[error("java_arguments.no_custom_resolution")]
     /// No custom resolution was provided
     ///
-    /// this _should NEVER_ happen, but incase it does, this exists. Please file a bug report.
+    /// this _should NEVER_ happen, but in case it does, this exists. Please file a bug report.
     NoCustomResolutionProvided,
 
     #[error("java_arguments.unrecognised_game_argument(arg={0})")]
@@ -217,7 +221,7 @@ pub enum CreateLibraryDownloadError {
     RequestError(#[from] reqwest::Error),
 
     #[error("library_download.maven_parse_error(error={0})")]
-    /// An error happene during a maven parse
+    /// An error happened during a maven parse
     MavenParseError(#[from] MavenIdentifierParseError),
 
     #[error("library_download.no_content_length_header")]
@@ -227,4 +231,84 @@ pub enum CreateLibraryDownloadError {
     #[error("library_download.cannot_parse_content_length")]
     /// content-length is not a valid number
     CannotParseContentLength,
+}
+
+#[derive(Error, Debug)]
+pub enum DeviceCodeError {
+    #[error("auth_error.request_error(error={})", .0)]
+    RequestError(#[from] reqwest::Error),
+
+    #[error("auth_error.microsoft_error(error={})", .0)]
+    MicrosoftError(String),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AuthTokenError {
+    pub error: AuthTokenErrorType,
+    pub error_description: String,
+    pub error_uri: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthTokenErrorType {
+    /// Continue polling
+    AuthorizationPending,
+    /// Stop polling
+    AuthorizationDeclined,
+    /// Stop polling
+    ExpiredToken,
+    /// Client should verify that the code is correct
+    BadVerificationCode,
+}
+
+#[derive(Error, Debug)]
+pub enum XstsError {
+    #[error("xsts_error.request_error(error={})", .0)]
+    RequestError(#[from] reqwest::Error),
+
+    #[error("xsts_error.microsoft_error(error={})", .0)]
+    MicrosoftError(XstsMsError),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct XstsMsError {
+    pub identity: String,
+    pub x_err: XErr,
+    pub message: String,
+    /// This usually does not resolve to anywhere
+    pub redirect: String,
+}
+
+impl Display for XstsMsError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.x_err, self.message)
+    }
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr, Copy, Clone)]
+#[repr(u32)]
+pub enum XErr {
+    NoXboxAccount = 2148916233,
+    /// Xbox live is banned in the users country
+    XboxLiveCountryBanned = 2148916235,
+    /// The user needs to be verified as an adult in South Korea
+    SouthKoreaAdultVerificationRequired = 2148916236,
+    /// The user needs to be verified as an adult in South Korea
+    SouthKoreaAdultVerificationRequired2 = 2148916237,
+}
+
+impl Display for XErr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", *self as u32)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum JWTVerificationError {
+    #[error("jwt_error.request_error(error={})", .0)]
+    RequestError(#[from] reqwest::Error),
+    #[error("jwt_error.verify_error(error={})", .0)]
+    VerificationError(#[from] jwt_simple::Error),
 }
