@@ -312,3 +312,12 @@ pub enum JWTVerificationError {
     #[error("jwt_error.verify_error(error={})", .0)]
     VerificationError(#[from] jwt_simple::Error),
 }
+
+#[derive(Error, Debug)]
+pub enum MinecraftProfileError {
+    #[error("minecraft_profile_error.request_error(error={})", .0)]
+    RequestError(#[from] reqwest::Error),
+    #[error("minecraft_profile_error.profile_not_found")]
+    /// Note that Xbox Game Pass users who haven't logged into the new Minecraft Launcher at least once will not return a profile, and will need to login once after activating Xbox Game Pass to setup their Minecraft username.
+    NotFound,
+}

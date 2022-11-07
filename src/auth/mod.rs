@@ -1,5 +1,5 @@
 use async_stream::try_stream;
-use futures::Stream;
+use futures::{pin_mut, Stream, StreamExt};
 use jwt_simple::prelude::*;
 use reqwest::StatusCode;
 use serde_json::json;
@@ -8,12 +8,13 @@ use tokio::time::{sleep, Duration};
 use crate::{
     auth::structs::JWTEntitlements,
     errors::{
-        AuthTokenError, AuthTokenErrorType, DeviceCodeError, JWTVerificationError, XstsError,
+        AuthTokenError, AuthTokenErrorType, DeviceCodeError, JWTVerificationError,
+        MinecraftProfileError, XstsError,
     },
 };
 
 use self::structs::{
-    AuthToken, AuthTokenRes, DeviceCode, MinecraftProductAttachment, MinecraftProfile,
+    AuthData, AuthToken, AuthTokenRes, DeviceCode, MinecraftProductAttachment, MinecraftProfile,
     MinecraftToken, XboxToken, XstsToken,
 };
 pub mod structs;
@@ -101,6 +102,34 @@ impl Auth {
                 }
             }
         }
+    }
+
+    /// This function will pull for the auth token until it gets it, and then return it
+    /// This function does not give a stream of updates during the process, it just returns the token or an error
+    pub async fn get_microsoft_auth_token(
+        &self,
+        device_code: &DeviceCode,
+    ) -> Result<AuthTokenRes, reqwest::Error> {
+        let stream = self.pull_for_auth(device_code);
+        pin_mut!(stream);
+
+        let auth_token = 'block: {
+            while let Some(v) = stream.next().await {
+                let v = v?;
+
+                match &v {
+                    AuthTokenRes::ExpectedError(err) => match err.error {
+                        AuthTokenErrorType::AuthorizationPending => continue,
+                        _ => break 'block v,
+                    },
+                    AuthTokenRes::Token(_) => break 'block v,
+                }
+            }
+
+            unreachable!()
+        };
+
+        Ok(auth_token)
     }
 
     pub async fn authenticate_xbox_live(
@@ -203,14 +232,31 @@ impl Auth {
     pub async fn get_minecraft_profile(
         &self,
         minecraft_token: &MinecraftToken,
-    ) -> Result<MinecraftProfile, reqwest::Error> {
-        self.http_client
+    ) -> Result<MinecraftProfile, MinecraftProfileError> {
+        let res = self
+            .http_client
             .get("https://api.minecraftservices.com/minecraft/profile")
             .bearer_auth(&minecraft_token.access_token)
             .send()
-            .await?
-            .json()
-            .await
+            .await?;
+
+        if res.status() == StatusCode::OK {
+            Ok(res.json().await?)
+        } else {
+            Err(MinecraftProfileError::NotFound)
+        }
+    }
+
+    pub fn create_auth_data(
+        &self,
+        minecraft_token: &MinecraftToken,
+        minecraft_profile: &MinecraftProfile,
+    ) -> AuthData {
+        AuthData {
+            access_token: minecraft_token.access_token.clone(),
+            username: minecraft_profile.name.clone(),
+            uuid: minecraft_profile.id.clone(),
+        }
     }
 }
 
