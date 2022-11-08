@@ -278,6 +278,7 @@ mod tests {
             .expect("Could not create device code");
     }
 
+    #[allow(dead_code)]
     // #[tokio::test]
     async fn test_full_flow() {
         let auth = Auth {
