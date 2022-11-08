@@ -8,6 +8,7 @@
 [![for the badge](https://forthebadge.com/images/badges/made-with-rust.svg)](https://forthebadge.com)
 [![for the badge](https://forthebadge.com/images/badges/mom-made-pizza-rolls.svg)](https://forthebadge.com)
 [![Wakatime](https://wakatime.com/badge/github/glowsquid-launcher/copper.svg?style=for-the-badge)](https://wakatime.com/badge/github/glowsquid-launcher/copper)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fglowsquid-launcher%2Fcopper.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fglowsquid-launcher%2Fcopper?ref=badge_shield)
 
 This is meant to be a mid-level structural launcher. It works in 3 steps:
 
@@ -30,5 +31,7 @@ Currently, this is being used as the launcher backend for the Glowsquid launcher
 - [x] proper error handling
 
 ## Testing
-
 TODO: refactor testing
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fglowsquid-launcher%2Fcopper.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fglowsquid-launcher%2Fcopper?ref=badge_large)
