@@ -1,4 +1,3 @@
-use std::ops::{Deref, DerefMut, Div};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -69,19 +68,15 @@ impl FromStr for MavenIdentifier {
     type Err = MavenIdentifierParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split(":");
-        let group_id = parts
+        let mut parts = s.split(':');
+
+        let [group_id, artifact_id, version] = parts
             .next()
+            .zip(parts.next())
+            .zip(parts.next())
+            .map(|((group, artifact), version)| [group, artifact, version]) //Option::map
             .ok_or(MavenIdentifierParseError::NotEnoughArgs)?
-            .to_string();
-        let artifact_id = parts
-            .next()
-            .ok_or(MavenIdentifierParseError::NotEnoughArgs)?
-            .to_string();
-        let version = parts
-            .next()
-            .ok_or(MavenIdentifierParseError::NotEnoughArgs)?
-            .to_string();
+            .map(ToString::to_string); //array::map
 
         Ok(Self {
             group_id,
@@ -100,7 +95,7 @@ pub async fn create_library_download(
 
     let maven_url = format!(
         "{}/{}/{}/{}-{}.jar",
-        identifier.group_id.replace(".", "/"),
+        identifier.group_id.replace('.', "/"),
         identifier.artifact_id,
         identifier.version,
         identifier.artifact_id,
@@ -152,36 +147,4 @@ pub fn create_client() -> Client {
         .tcp_keepalive(Some(Duration::from_secs(30)))
         .build()
         .unwrap()
-}
-
-pub struct DivPathBuf(pub PathBuf);
-
-impl Deref for DivPathBuf {
-    type Target = PathBuf;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for DivPathBuf {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl Div<&str> for DivPathBuf {
-    type Output = DivPathBuf;
-
-    fn div(self, rhs: &str) -> Self::Output {
-        DivPathBuf(self.join(rhs))
-    }
-}
-
-impl Div<&str> for &DivPathBuf {
-    type Output = DivPathBuf;
-
-    fn div(self, rhs: &str) -> Self::Output {
-        DivPathBuf(self.join(rhs))
-    }
 }

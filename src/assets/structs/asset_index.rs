@@ -39,7 +39,7 @@ impl AssetIndex {
         debug!("Creating AssetIndex file at {}", &save_path.display());
         let mut file = std::fs::File::create(&save_path)?;
         debug!("Writing JSON to AssetIndex file");
-        file.write(json.as_bytes())?;
+        file.write_all(json.as_bytes())?;
 
         debug!(
             "Saved AssetIndex to {}",
@@ -93,7 +93,7 @@ impl AssetIndex {
         let total = tasks.len();
         let mut finished = 0;
 
-        while let Some(_) = tasks.next().await {
+        while (tasks.next().await).is_some() {
             finished += 1;
             debug!("{}/{} asset downloads finished", finished, total);
             let _ = progress_sender.send(DownloadProgress {

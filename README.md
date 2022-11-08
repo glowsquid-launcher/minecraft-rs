@@ -19,20 +19,12 @@ This is meant to be used as a library, but a standalone is also in the works (ma
 Currently, this is being used as the launcher backend for the glowsquid launcher.
 
 ## Features
-- [x] can actually downloda minecraft
+- [x] can actually download minecraft
 - [x] parses version manifests for you
-- [x] comes with a CLI (WIP, authentication still needs to be added to the CLI)
 - [x] proper error handling
 
 ## Testing
-
-Testing basically works by:
-
-- run something in minecraft CLI
-- see if it makes sense
-
-What makes sense should make sense for the launcher
-
+TODO: refactor testing
 
 ## License
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fglowsquid-launcher%2Fcopper.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fglowsquid-launcher%2Fcopper?ref=badge_large)

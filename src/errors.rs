@@ -53,7 +53,7 @@ pub enum VersionError {
 
     #[error("version.library_download_error(error={0})")]
     /// An error happened during creating a library download from a maven url
-    LibraryDownloadError(#[from] CreateLibraryDownloadError)
+    LibraryDownloadError(#[from] CreateLibraryDownloadError),
 }
 
 #[derive(Error, Debug)]
@@ -207,7 +207,7 @@ pub enum SaveError {
 pub enum MavenIdentifierParseError {
     #[error("maven_parse.not_enough_args")]
     /// There were not enough `:` in the string to properly parse it
-    NotEnoughArgs
+    NotEnoughArgs,
 }
 
 #[derive(Error, Debug)]
@@ -225,6 +225,6 @@ pub enum CreateLibraryDownloadError {
     NoContentLength,
 
     #[error("library_download.cannot_parse_content_length")]
-    /// content-length is not a valid number 
-    CannotParseContentLength
+    /// content-length is not a valid number
+    CannotParseContentLength,
 }

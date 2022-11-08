@@ -13,20 +13,20 @@ keywords = ["minecraft", "launcher", "game"]
 categories = ["api-bindings"]
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = [
+serde = { version = "1.0.145", features = ["derive"] }
+serde_json = "1.0.85"
+tokio = { version = "1.21.2", features = [
   "fs",
   "process",
 ] }
-reqwest = { version = "0.11", features = ["json", "stream"] }
+reqwest = { version = "0.11.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 tokio-retry = "0.3"
-futures = "0.3"
-tracing = "0.1"
-dunce = "1"
-thiserror = "1"
-itertools = "0.10"
+futures = "0.3.24"
+tracing = "0.1.36"
+dunce = "1.0.2"
+thiserror = "1.0.37"
+itertools = "0.10.5"
 
 # why do you have to do this mojang
 [target.'cfg(target_os = "windows")'.dependencies]
-winsafe = { version = "0.0.10", features = ["kernel"] }
+winsafe = { version = "0.0.11", features = ["kernel"] }

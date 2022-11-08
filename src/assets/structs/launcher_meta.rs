@@ -42,10 +42,10 @@ impl Version {
     pub async fn version(&self) -> Result<VersionManifest, reqwest::Error> {
         trace!("Downloading version manifest for {}", self.id);
         // download the version manifest and return a parsed version manifest
-        Ok(reqwest::get(&self.url)
+        reqwest::get(&self.url)
             .await?
             .json::<VersionManifest>()
-            .await?)
+            .await
     }
 }
 
@@ -56,8 +56,7 @@ impl Latest {
         launcher_meta
             .versions
             .iter()
-            .filter(|version| version.id == self.release)
-            .next()
+            .find(|version| version.id == self.release)
             .unwrap()
     }
 
@@ -67,8 +66,7 @@ impl Latest {
         launcher_meta
             .versions
             .iter()
-            .filter(|version| version.id == self.snapshot)
-            .next()
+            .find(|version| version.id == self.snapshot)
             .unwrap()
     }
 }
@@ -79,9 +77,6 @@ impl LauncherMeta {
         let server_url = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
         debug!("Downloading launcher meta from {}", server_url);
 
-        Ok(reqwest::get(server_url)
-            .await?
-            .json::<LauncherMeta>()
-            .await?)
+        reqwest::get(server_url).await?.json::<LauncherMeta>().await
     }
 }

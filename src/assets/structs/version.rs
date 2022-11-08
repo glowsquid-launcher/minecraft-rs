@@ -73,16 +73,16 @@ impl Version {
 
             let jvm = current_arguments
                 .jvm
-                .unwrap_or(vec![])
+                .unwrap_or_default()
                 .into_iter()
-                .chain(arguments.jvm.unwrap_or(vec![]).into_iter())
+                .chain(arguments.jvm.unwrap_or_default().into_iter())
                 .collect();
 
             let game = current_arguments
                 .game
-                .unwrap_or(vec![])
+                .unwrap_or_default()
                 .into_iter()
-                .chain(arguments.game.unwrap_or(vec![]))
+                .chain(arguments.game.unwrap_or_default())
                 .collect();
 
             merged.arguments = Some(Arguments {
@@ -115,9 +115,9 @@ impl Version {
         // library (combining)
         merged.libraries = Some(
             self.libraries
-                .unwrap_or(vec![])
+                .unwrap_or_default()
                 .into_iter()
-                .chain(lower.libraries.unwrap_or(vec![]).into_iter())
+                .chain(lower.libraries.unwrap_or_default().into_iter())
                 .collect(),
         );
 
@@ -152,7 +152,7 @@ impl Version {
         debug!("Creating file at {}", save_path.display());
         let mut file = std::fs::File::create(&save_path)?;
         debug!("Writing version file to file");
-        file.write(json.as_bytes())?;
+        file.write_all(json.as_bytes())?;
 
         debug!("Saved version file to {}", &save_path.display());
         Ok(())
@@ -257,7 +257,7 @@ impl Version {
         let total = tasks.len();
         let mut finished = 0;
 
-        while let Some(_) = tasks.next().await {
+        while (tasks.next().await).is_some() {
             finished += 1;
             debug!("{}/{} library downloads finished", finished, total);
             let _ = progress_sender.send(DownloadProgress {
