@@ -5,7 +5,7 @@ use axum::{
     routing::get,
     Router,
 };
-use copper::auth::{MSOauth, OauthCode};
+use copper::auth::{structs::OauthCode, MSauth};
 use error_stack::Report;
 use oauth2::{CsrfToken, PkceCodeVerifier};
 use tokio::{sync::mpsc, task};
@@ -30,7 +30,7 @@ static PKCE_VERIFIER: OnceLock<PkceCodeVerifier> = OnceLock::new();
 #[derive(Clone)]
 struct AppState {
     shutdown_signal: mpsc::Sender<()>,
-    oauth: MSOauth,
+    oauth: MSauth,
 }
 
 #[tokio::main]
@@ -55,7 +55,7 @@ async fn main() {
     // now lets start!
     // we need a redirect uri so that the oauth server can redirect the user back to our server
     let redirect_uri = "http://localhost:3000/code".to_string();
-    let oauth = MSOauth::new(
+    let oauth = MSauth::new(
         redirect_uri,
         CLIENT_ID.to_string(),
         CLIENT_SECRET.to_string(),
@@ -88,7 +88,7 @@ async fn main() {
     // read more about it at https://en.wikipedia.org/wiki/Cross-site_request_forgery
     // the tl;dr is that it is a security measure to prevent malicious websites from impersonating
     // us
-    let (auth_url, csrf_token, pkce) = oauth.get_auth_url();
+    let (auth_url, csrf_token, pkce) = oauth.get_auth_info();
 
     // now that we have the verifier and token, we can set it so it can be accessed by the server
     // this is not the best way to do it, but it is the easiest

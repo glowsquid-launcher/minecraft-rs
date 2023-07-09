@@ -13,19 +13,19 @@ keywords = ["minecraft", "launcher", "game"]
 categories = ["api-bindings"]
 
 [dependencies]
-axum = { version = "0.6.18", features = ["tracing"] }
+chrono = { version = "0.4.26", default-features = false, features = ["std"] }
 error-stack = { version = "0.3.1", features = ["spantrace"] }
-fs = "0.0.5"
 oauth2 = "4.4.1"
 reqwest = { version = "0.11.18", default-features = false, features = ["rustls-tls", "json"] }
 serde = { version = "1.0.167", features = ["derive"] }
 serde_json = "1.0.100"
-tokio = { version = "1.29.1", features = ["fs"] }
+tokio = "1.29.1"
 tracing = "0.1.37"
 tracing-error = "0.2.0"
+veil = "0.1.6"
 
 [dev-dependencies]
-axum = "0.6.18"
+axum = { version = "0.6.18", features = ["tracing"] }
 tokio = { version = "1.29.1", features = ["macros", "rt"] }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 

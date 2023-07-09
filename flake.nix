@@ -107,13 +107,6 @@
             nodejs
 	    nodePackages.typescript-language-server
 	    marksman
-
-            pkg-config
-            libsoup
-            webkitgtk
-	    gtk4
-            gtksourceview
-            libayatana-appindicator-gtk3
           ];
         };
       });
