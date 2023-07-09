@@ -36,7 +36,7 @@
         inherit (pkgs) lib;
 
 
-        rustTC = pkgs.rust-bin.stable.latest.default.override {
+        rustTC = pkgs.rust-bin.nightly.latest.default.override {
           extensions = [ "rustfmt" "rust-analyzer" "rust-src"];
         };
 
@@ -103,15 +103,15 @@
           # Extra inputs can be added here
           nativeBuildInputs = with pkgs; [
             rustTC
-            rnix-lsp
+	    nil
             nodejs
+	    nodePackages.typescript-language-server
+	    marksman
 
             pkg-config
             libsoup
-            openssl
-            libressl
             webkitgtk
-            gtk3-x11
+	    gtk4
             gtksourceview
             libayatana-appindicator-gtk3
           ];

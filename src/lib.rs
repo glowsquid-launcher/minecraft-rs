@@ -1,6 +1,3 @@
-pub mod assets;
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+
 pub mod auth;
-pub mod errors;
-pub mod launcher;
-pub mod parser;
-pub mod util;

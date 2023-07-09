@@ -9,7 +9,6 @@ use crate::util::create_library_download;
 
 #[cfg(target_os = "windows")]
 use winsafe::IsWindows10OrGreater;
-// Windows users, please test this ^
 
 pub struct GameArguments;
 pub struct JavaArguments;
