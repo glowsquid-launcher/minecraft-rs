@@ -2,19 +2,8 @@ use std::{error::Error, fmt::Display, path::Path};
 
 use error_stack::{IntoReport, ResultExt};
 use serde::{Deserialize, Serialize};
-use serde_json::{from_value, to_string};
+use serde_json::to_string;
 use tokio::fs;
-
-pub enum Manifest {
-    /// The first version of the manifest format, used until 13w39a
-    V1(V1Manifest),
-    /// The second version of the manifest format, used from 13w39a to 17w43a
-    V2(V2Manifest),
-    /// The third version of the manifest format, used from 17w43a to 19w36a
-    V3(V3Manifest),
-    /// The fourth version of the manifest format, used from 19w36a+
-    V4(V4Manifest),
-}
 
 #[derive(Debug)]
 pub enum SaveError {
@@ -34,47 +23,12 @@ impl Display for SaveError {
 impl Error for SaveError {}
 
 impl Manifest {
-    /// Tries to parse a manifest from a JSON value.
-    ///
-    /// Returns [`Option::None`] if the value is not a valid manifest.
-    pub(super) fn from_value(value: serde_json::Value) -> Result<Self, serde_json::Error> {
-        from_value::<V4Manifest>(value.clone())
-            .map(Manifest::V4)
-            .or_else(|_| from_value::<V3Manifest>(value.clone()).map(Manifest::V3))
-            .or_else(|_| from_value::<V2Manifest>(value.clone()).map(Manifest::V2))
-            .or_else(|_| from_value::<V1Manifest>(value).map(Manifest::V1))
-    }
-
-    #[must_use]
-    pub const fn manifest_version(&self) -> u8 {
-        match self {
-            Self::V1(_) => 1,
-            Self::V2(_) => 2,
-            Self::V3(_) => 3,
-            Self::V4(_) => 4,
-        }
-    }
-
-    /// Serializes the manifest to a JSON string.
-    ///
-    /// # Errors
-    /// Returns a [`serde_json::Error`] if the manifest could not be serialized.
-    fn serialize(&self) -> Result<String, serde_json::Error> {
-        match self {
-            Self::V1(m) => to_string(m),
-            Self::V2(m) => to_string(m),
-            Self::V3(m) => to_string(m),
-            Self::V4(m) => to_string(m),
-        }
-    }
-
     /// Saves the manifest to disk.
     ///
     /// # Errors
     /// Returns a [`SaveError`] if the manifest could not be serialized or if an IO error occurred.
     pub async fn save_to_disk(&self, path: &Path) -> error_stack::Result<(), SaveError> {
-        let value = self
-            .serialize()
+        let value = to_string(self)
             .into_report()
             .change_context(SaveError::SerializeError)?;
 
@@ -92,25 +46,35 @@ impl Manifest {
             .into_report()
             .change_context(SaveError::IOError)
     }
+
+    pub fn get_java_version(&self) -> u8 {
+        match &self.java_version {
+            Some(m) => m.major_version,
+            None => 8,
+        }
+    }
 }
 
 // Thank you quicktype, very cool :ferrisBased:
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct V1Manifest {
+pub struct Manifest {
     asset_index: AssetIndex,
     assets: String,
     downloads: Downloads,
     id: String,
     libraries: Vec<Library>,
     main_class: String,
-    minecraft_arguments: String,
+    /// Used before 1.13
+    minecraft_arguments: Option<String>,
     minimum_launcher_version: i64,
+    java_version: Option<JavaVersion>,
     release_time: String,
     time: String,
     #[serde(rename = "type")]
     manifest_type: Type,
+    logging: Option<Logging>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -182,29 +146,9 @@ pub enum Name {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct V2Manifest {
-    asset_index: AssetIndex,
-    assets: String,
-    compliance_level: i64,
-    downloads: Downloads,
-    id: String,
-    java_version: JavaVersion,
-    libraries: Vec<Library>,
-    logging: Logging,
-    main_class: String,
-    minecraft_arguments: String,
-    minimum_launcher_version: i64,
-    release_time: String,
-    time: String,
-    #[serde(rename = "type")]
-    manifest_type: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct JavaVersion {
     component: String,
-    major_version: i64,
+    major_version: u8,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -227,26 +171,6 @@ pub struct File {
     sha1: String,
     size: i64,
     url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct V3Manifest {
-    arguments: Arguments,
-    asset_index: AssetIndex,
-    assets: String,
-    compliance_level: i64,
-    downloads: Downloads,
-    id: String,
-    java_version: JavaVersion,
-    libraries: Vec<Library>,
-    logging: Logging,
-    main_class: String,
-    minimum_launcher_version: i64,
-    release_time: String,
-    time: String,
-    #[serde(rename = "type")]
-    v3_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -295,26 +219,6 @@ pub struct Natives {
     linux: Option<String>,
     osx: Option<String>,
     windows: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct V4Manifest {
-    arguments: Arguments,
-    asset_index: AssetIndex,
-    assets: String,
-    compliance_level: i64,
-    downloads: Downloads,
-    id: String,
-    java_version: JavaVersion,
-    libraries: Vec<Library>,
-    logging: Logging,
-    main_class: String,
-    minimum_launcher_version: i64,
-    release_time: String,
-    time: String,
-    #[serde(rename = "type")]
-    manifest_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

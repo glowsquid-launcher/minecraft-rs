@@ -6,7 +6,6 @@ use std::{
 
 use error_stack::{IntoReport, ResultExt};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use super::client;
 
@@ -100,16 +99,12 @@ impl Version {
     /// # Errors
     /// Errors if the request fails or if the response is not a valid [`client::Manifest`].
     pub async fn download(&self) -> error_stack::Result<client::Manifest, GetError> {
-        let version = reqwest::get(&self.url)
+        reqwest::get(&self.url)
             .await
             .into_report()
             .change_context(GetError::Request)?
-            .json::<Value>()
+            .json::<client::Manifest>()
             .await
-            .into_report()
-            .change_context(GetError::CannotParse)?;
-
-        client::Manifest::from_value(version)
             .into_report()
             .change_context(GetError::CannotParse)
     }
@@ -147,23 +142,28 @@ mod tests {
     async fn parse_latest() {
         let manifest = Manifest::get().await.unwrap();
 
-        let latest = manifest.latest_release().download().await.unwrap();
-        assert_eq!(latest.manifest_version(), 4);
+        manifest.latest_release().download().await.unwrap();
     }
 
-    // Version 5 and 6 bring such minor changes that don't affect launching. So they are simply
-    // merged into version 4
-    #[test_case("13w38a", 1; "Version 1")]
-    #[test_case("13w39a", 2; "Version 2")]
-    #[test_case("19w35a", 3; "Version 3")]
-    #[test_case("20w20a", 4; "Version 4")]
-    #[test_case("20w21a", 4; "Version 5")]
-    #[test_case("20w45a", 4; "Version 6")]
+    #[test_case("13w38a"; "Version 1")]
+    #[test_case("13w39a"; "Version 2")]
+    #[test_case("19w35a"; "Version 3")]
+    #[test_case("20w20a"; "Version 4")]
+    #[test_case("20w21a"; "Version 5")]
+    #[test_case("20w45a"; "Version 6")]
+    // some standards
+    #[test_case("1.20"; "1.20")]
+    #[test_case("1.18"; "1.18")]
+    #[test_case("1.13"; "1.13")]
+    #[test_case("1.12"; "1.12")]
+    #[test_case("1.15"; "1.15")]
+    #[test_case("1.7.10"; "1.7.10")]
+    #[test_case("1.8.9"; "1.8.9")]
     #[tokio::test]
-    async fn parse(id: &str, manifest_version: u8) {
+    async fn parse(id: &str) {
         let manifest = Manifest::get().await.unwrap();
 
-        let version = manifest
+        manifest
             .versions
             .iter()
             .find(|v| v.id == id)
@@ -171,8 +171,5 @@ mod tests {
             .download()
             .await
             .unwrap();
-
-        // TODO: A version may parse as a newer one. We need to change test cases so it doesn't
-        assert!(version.manifest_version() >= manifest_version);
     }
 }
