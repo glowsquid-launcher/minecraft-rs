@@ -75,16 +75,16 @@ pub struct Version {
 }
 
 #[derive(Debug)]
-pub enum VersionGetError {
+pub enum GetError {
     Request,
     CannotParse,
 }
 
-impl Display for VersionGetError {
+impl Display for GetError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            VersionGetError::Request => write!(f, "Could not get version manifest"),
-            VersionGetError::CannotParse => write!(
+            Self::Request => write!(f, "Could not get version manifest"),
+            Self::CannotParse => write!(
                 f,
                 "Could not parse version manifest. Please report this as a bug."
             ),
@@ -92,23 +92,26 @@ impl Display for VersionGetError {
     }
 }
 
-impl Error for VersionGetError {}
+impl Error for GetError {}
 
 impl Version {
-    /// Tries to parse a manifest from a JSON value.
-    pub async fn download(&self) -> error_stack::Result<client::Manifest, VersionGetError> {
+    /// Tries to download and parse the version manifest.
+    ///
+    /// # Errors
+    /// Errors if the request fails or if the response is not a valid [`client::Manifest`].
+    pub async fn download(&self) -> error_stack::Result<client::Manifest, GetError> {
         let version = reqwest::get(&self.url)
             .await
             .into_report()
-            .change_context(VersionGetError::Request)?
+            .change_context(GetError::Request)?
             .json::<Value>()
             .await
             .into_report()
-            .change_context(VersionGetError::CannotParse)?;
+            .change_context(GetError::CannotParse)?;
 
         client::Manifest::from_value(version)
             .into_report()
-            .change_context(VersionGetError::CannotParse)
+            .change_context(GetError::CannotParse)
     }
 }
 
@@ -145,15 +148,17 @@ mod tests {
         let manifest = Manifest::get().await.unwrap();
 
         let latest = manifest.latest_release().download().await.unwrap();
-        assert_eq!(latest.manifest_version(), 6);
+        assert_eq!(latest.manifest_version(), 4);
     }
 
+    // Version 5 and 6 bring such minor changes that don't affect launching. So they are simply
+    // merged into version 4
     #[test_case("13w38a", 1; "Version 1")]
     #[test_case("13w39a", 2; "Version 2")]
     #[test_case("19w35a", 3; "Version 3")]
     #[test_case("20w20a", 4; "Version 4")]
-    #[test_case("20w21a", 5; "Version 5")]
-    #[test_case("20w45a", 6; "Version 6")]
+    #[test_case("20w21a", 4; "Version 5")]
+    #[test_case("20w45a", 4; "Version 6")]
     #[tokio::test]
     async fn parse(id: &str, manifest_version: u8) {
         let manifest = Manifest::get().await.unwrap();

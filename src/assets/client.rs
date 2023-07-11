@@ -12,12 +12,8 @@ pub enum Manifest {
     V2(V2Manifest),
     /// The third version of the manifest format, used from 17w43a to 19w36a
     V3(V3Manifest),
-    /// The fourth version of the manifest format, used from 19w36a to 20w21a
+    /// The fourth version of the manifest format, used from 19w36a+
     V4(V4Manifest),
-    /// The fifth version of the manifest format, used from 20w21a to 20w45a
-    V5(V5Manifest),
-    /// The sixth version of the manifest format, used from 20w45a and ongoing
-    V6(V6Manifest),
 }
 
 #[derive(Debug)]
@@ -29,8 +25,8 @@ pub enum SaveError {
 impl Display for SaveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SaveError::SerializeError => write!(f, "Failed to serialize manifest to JSON"),
-            SaveError::IOError => write!(f, "Failed during IO task"),
+            Self::SerializeError => write!(f, "Failed to serialize manifest to JSON"),
+            Self::IOError => write!(f, "Failed during IO task"),
         }
     }
 }
@@ -42,37 +38,40 @@ impl Manifest {
     ///
     /// Returns [`Option::None`] if the value is not a valid manifest.
     pub(super) fn from_value(value: serde_json::Value) -> Result<Self, serde_json::Error> {
-        from_value::<V6Manifest>(value.clone())
-            .map(Manifest::V6)
-            .or_else(|_| from_value::<V5Manifest>(value.clone()).map(Manifest::V5))
-            .or_else(|_| from_value::<V4Manifest>(value.clone()).map(Manifest::V4))
+        from_value::<V4Manifest>(value.clone())
+            .map(Manifest::V4)
             .or_else(|_| from_value::<V3Manifest>(value.clone()).map(Manifest::V3))
             .or_else(|_| from_value::<V2Manifest>(value.clone()).map(Manifest::V2))
             .or_else(|_| from_value::<V1Manifest>(value).map(Manifest::V1))
     }
 
-    pub fn manifest_version(&self) -> u8 {
+    #[must_use]
+    pub const fn manifest_version(&self) -> u8 {
         match self {
-            Manifest::V1(_) => 1,
-            Manifest::V2(_) => 2,
-            Manifest::V3(_) => 3,
-            Manifest::V4(_) => 4,
-            Manifest::V5(_) => 5,
-            Manifest::V6(_) => 6,
+            Self::V1(_) => 1,
+            Self::V2(_) => 2,
+            Self::V3(_) => 3,
+            Self::V4(_) => 4,
         }
     }
 
+    /// Serializes the manifest to a JSON string.
+    ///
+    /// # Errors
+    /// Returns a [`serde_json::Error`] if the manifest could not be serialized.
     fn serialize(&self) -> Result<String, serde_json::Error> {
         match self {
-            Manifest::V1(m) => to_string(m),
-            Manifest::V2(m) => to_string(m),
-            Manifest::V3(m) => to_string(m),
-            Manifest::V4(m) => to_string(m),
-            Manifest::V5(m) => to_string(m),
-            Manifest::V6(m) => to_string(m),
+            Self::V1(m) => to_string(m),
+            Self::V2(m) => to_string(m),
+            Self::V3(m) => to_string(m),
+            Self::V4(m) => to_string(m),
         }
     }
 
+    /// Saves the manifest to disk.
+    ///
+    /// # Errors
+    /// Returns a [`SaveError`] if the manifest could not be serialized or if an IO error occurred.
     pub async fn save_to_disk(&self, path: &Path) -> error_stack::Result<(), SaveError> {
         let value = self
             .serialize()
@@ -102,16 +101,23 @@ impl Manifest {
 pub struct V1Manifest {
     asset_index: AssetIndex,
     assets: String,
-    downloads: V1Downloads,
+    downloads: Downloads,
     id: String,
-    libraries: Vec<V1Library>,
+    libraries: Vec<Library>,
     main_class: String,
     minecraft_arguments: String,
     minimum_launcher_version: i64,
     release_time: String,
     time: String,
     #[serde(rename = "type")]
-    v1_type: String,
+    manifest_type: Type,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Type {
+    Release,
+    Snapshot,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -125,39 +131,20 @@ pub struct AssetIndex {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct V1Downloads {
-    client: ServerClass,
-    server: ServerClass,
-    windows_server: WindowsServer,
+pub struct Downloads {
+    client: DownloadClass,
+    server: DownloadClass,
+    client_mappings: Option<Mappings>,
+    server_mappings: Option<Mappings>,
+    /// Only present in version 1 of the manifest it seems
+    windows_server: Option<DownloadClass>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ServerClass {
+pub struct DownloadClass {
     sha1: String,
     size: i64,
     url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WindowsServer {
-    sha1: String,
-    size: i64,
-    url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct V1Library {
-    downloads: PurpleDownloads,
-    name: String,
-    rules: Option<Vec<Rule>>,
-    extract: Option<Extract>,
-    natives: Option<Natives>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PurpleDownloads {
-    artifact: Option<Artifact>,
-    classifiers: Option<PurpleClassifiers>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -166,14 +153,6 @@ pub struct Artifact {
     sha1: String,
     size: i64,
     url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct PurpleClassifiers {
-    natives_linux: Option<Artifact>,
-    natives_osx: Artifact,
-    natives_windows: Option<Artifact>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -207,10 +186,10 @@ pub struct V2Manifest {
     asset_index: AssetIndex,
     assets: String,
     compliance_level: i64,
-    downloads: V1Downloads,
+    downloads: Downloads,
     id: String,
     java_version: JavaVersion,
-    libraries: Vec<V2Library>,
+    libraries: Vec<Library>,
     logging: Logging,
     main_class: String,
     minecraft_arguments: String,
@@ -218,7 +197,7 @@ pub struct V2Manifest {
     release_time: String,
     time: String,
     #[serde(rename = "type")]
-    v2_type: String,
+    manifest_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -229,26 +208,12 @@ pub struct JavaVersion {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct V2Library {
-    downloads: FluffyDownloads,
-    name: String,
-    rules: Option<Vec<Rule>>,
-    extract: Option<Extract>,
-    natives: Option<Natives>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FluffyDownloads {
-    artifact: Option<Artifact>,
-    classifiers: Option<PurpleClassifiers>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct Logging {
     client: LoggingClient,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(clippy::module_name_repetitions)]
 pub struct LoggingClient {
     argument: String,
     file: File,
@@ -267,14 +232,14 @@ pub struct File {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct V3Manifest {
-    arguments: V3Arguments,
+    arguments: Arguments,
     asset_index: AssetIndex,
     assets: String,
     compliance_level: i64,
-    downloads: V3Downloads,
+    downloads: Downloads,
     id: String,
     java_version: JavaVersion,
-    libraries: Vec<V3Library>,
+    libraries: Vec<Library>,
     logging: Logging,
     main_class: String,
     minimum_launcher_version: i64,
@@ -285,14 +250,8 @@ pub struct V3Manifest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct V3Arguments {
-    game: Vec<PurpleGame>,
-    jvm: Vec<Jvm>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum PurpleGame {
+pub enum Game {
     GameClass(GameClass),
     String(String),
 }
@@ -323,29 +282,8 @@ pub enum Value {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct V3Downloads {
-    client: ServerClass,
-    server: ServerClass,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct V3Library {
-    downloads: TentacledDownloads,
-    name: String,
-    natives: Option<Natives>,
-    extract: Option<Extract>,
-    rules: Option<Vec<Rule>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TentacledDownloads {
-    artifact: Artifact,
-    classifiers: Option<FluffyClassifiers>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct FluffyClassifiers {
+pub struct Classifiers {
     natives_linux: Option<Artifact>,
     natives_macos: Option<Artifact>,
     natives_windows: Option<Artifact>,
@@ -362,47 +300,21 @@ pub struct Natives {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct V4Manifest {
-    arguments: V4Arguments,
+    arguments: Arguments,
     asset_index: AssetIndex,
     assets: String,
     compliance_level: i64,
-    downloads: V4Downloads,
+    downloads: Downloads,
     id: String,
     java_version: JavaVersion,
-    libraries: Vec<V4Library>,
+    libraries: Vec<Library>,
     logging: Logging,
     main_class: String,
     minimum_launcher_version: i64,
     release_time: String,
     time: String,
     #[serde(rename = "type")]
-    v4_type: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct V4Arguments {
-    game: Vec<FluffyGame>,
-    jvm: Vec<IndecentJvm>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum FluffyGame {
-    GameClass(GameClass),
-    String(String),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IndecentJvm {
-    FluffyJvm(FluffyJvm),
-    String(String),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FluffyJvm {
-    rules: Vec<Rule>,
-    value: Value,
+    manifest_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -413,72 +325,10 @@ pub struct Os {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct V4Downloads {
-    client: ServerClass,
-    client_mappings: Mappings,
-    server: ServerClass,
-    server_mappings: Mappings,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct Mappings {
     sha1: String,
     size: i64,
     url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct V4Library {
-    downloads: StickyDownloads,
-    name: String,
-    rules: Option<Vec<IndigoRule>>,
-    natives: Option<Natives>,
-    extract: Option<Extract>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StickyDownloads {
-    artifact: Artifact,
-    classifiers: Option<FluffyClassifiers>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IndigoRule {
-    action: Action,
-    os: Option<Os>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct V5Manifest {
-    arguments: V5Arguments,
-    asset_index: AssetIndex,
-    assets: String,
-    compliance_level: i64,
-    downloads: V4Downloads,
-    id: String,
-    java_version: JavaVersion,
-    libraries: Vec<V5Library>,
-    logging: Logging,
-    main_class: String,
-    minimum_launcher_version: i64,
-    release_time: String,
-    time: String,
-    #[serde(rename = "type")]
-    v5_type: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct V5Arguments {
-    game: Vec<TentacledGame>,
-    jvm: Vec<Jvm>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum TentacledGame {
-    GameClass(GameClass),
-    String(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -495,77 +345,23 @@ pub struct JvmRule {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct V5Library {
-    downloads: IndigoDownloads,
+pub struct Arguments {
+    game: Vec<Game>,
+    jvm: Vec<Jvm>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Library {
+    downloads: LibraryDownloads,
     name: String,
-    rules: Option<Vec<IndigoRule>>,
+    rules: Option<Vec<Rule>>,
     natives: Option<Natives>,
     extract: Option<Extract>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct IndigoDownloads {
-    artifact: Artifact,
-    classifiers: Option<FluffyClassifiers>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct V6Manifest {
-    arguments: V6Arguments,
-    asset_index: AssetIndex,
-    assets: String,
-    compliance_level: i64,
-    downloads: V4Downloads,
-    id: String,
-    java_version: JavaVersion,
-    libraries: Vec<V6Library>,
-    logging: Logging,
-    main_class: String,
-    minimum_launcher_version: i64,
-    release_time: String,
-    time: String,
-    #[serde(rename = "type")]
-    v6_type: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct V6Arguments {
-    game: Vec<StickyGame>,
-    jvm: Vec<AmbitiousJvm>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum StickyGame {
-    GameClass(GameClass),
-    String(String),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum AmbitiousJvm {
-    StickyJvm(StickyJvm),
-    String(String),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StickyJvm {
-    rules: Vec<Rule>,
-    value: Value,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct V6Library {
-    downloads: IndecentDownloads,
-    name: String,
-    rules: Option<Vec<IndigoRule>>,
-    natives: Option<Natives>,
-    extract: Option<Extract>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IndecentDownloads {
-    artifact: Artifact,
-    classifiers: Option<FluffyClassifiers>,
+pub struct LibraryDownloads {
+    /// Seemingly not present in version 1 and 2?
+    artifact: Option<Artifact>,
+    classifiers: Option<Classifiers>,
 }
