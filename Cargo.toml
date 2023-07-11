@@ -19,7 +19,8 @@ oauth2 = "4.4.1"
 reqwest = { version = "0.11.18", default-features = false, features = ["rustls-tls", "json"] }
 serde = { version = "1.0.167", features = ["derive"] }
 serde_json = "1.0.100"
-tokio = "1.29.1"
+test-case = "3.1.0"
+tokio = { version = "1.29.1", features = ["fs"] }
 tracing = "0.1.37"
 tracing-error = "0.2.0"
 veil = "0.1.6"
