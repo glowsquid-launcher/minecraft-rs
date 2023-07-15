@@ -35,7 +35,6 @@
 
         inherit (pkgs) lib;
 
-
         rustTC = pkgs.rust-bin.nightly.latest.default.override {
           extensions = [ "rustfmt" "rust-analyzer" "rust-src"];
         };

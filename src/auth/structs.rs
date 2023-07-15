@@ -74,6 +74,29 @@ pub struct MinecraftToken {
     pub expires_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MinecraftProfile {
+    id: String,
+    name: String,
+    skins: Vec<Skin>,
+    capes: Vec<Option<serde_json::Value>>,
+}
+
+impl MinecraftProfile {
+    pub fn id(&self) -> &str {
+        self.id.as_ref()
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Skin {
+    id: String,
+    state: String,
+    url: String,
+    variant: String,
+    alias: String,
+}
+
 impl From<MinecraftResponse> for MinecraftToken {
     fn from(val: MinecraftResponse) -> Self {
         Self {

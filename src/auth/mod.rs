@@ -10,7 +10,9 @@ use oauth2::{
 use serde_json::json;
 use tracing::{debug, trace};
 
-use self::structs::{MinecraftResponse, OauthCode, XboxLiveResponse, XboxResponse, XstsResponse};
+use self::structs::{
+    MinecraftProfile, MinecraftResponse, OauthCode, XboxLiveResponse, XboxResponse, XstsResponse,
+};
 use self::{
     errors::{MinecraftTokenError, OauthError, XboxError},
     structs::MinecraftToken,
@@ -223,6 +225,25 @@ impl MSauth {
             .await
             .into_report()
             .change_context(OauthError::TokenFetchError)
+    }
+
+    /// Gets the minecraft profile
+    ///
+    /// # Errors
+    /// Errors if the token is invalid or the request fails.
+    #[tracing::instrument]
+    pub async fn get_minecraft_profile(
+        &self,
+        token: &MinecraftToken,
+    ) -> Result<MinecraftProfile, reqwest::Error> {
+        reqwest::Client::new()
+            .get("https://api.minecraftservices.com/minecraft/profile")
+            .bearer_auth(&token.access_token)
+            .send()
+            .await?
+            .json()
+            .await
+            .into_report()
     }
 
     /// Refreshes a microsoft access token
