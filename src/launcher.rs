@@ -1,5 +1,6 @@
 use std::{
     io::BufReader,
+    iter,
     path::PathBuf,
     process::{ChildStderr, ChildStdout, ExitStatus},
 };
@@ -67,32 +68,32 @@ impl Quickplay {
 
 #[derive(Debug)]
 pub struct Launcher {
-    /// the authentication details (username, uuid, access token, xbox uid, etc)
+    /// The authentication details (username, uuid, access token, xbox uid, etc)
     authentication_details: AuthenticationDetails,
-    /// a custom resolution to use instead of the default
+    /// A custom resolution to use instead of the default
     custom_resolution: Option<CustomResolution>,
-    /// the minecraft jar file path
+    /// The minecraft jar file path
     jar_path: PathBuf,
-    /// the root .minecraft folder
+    /// The root .minecraft folder
     game_directory: PathBuf,
-    /// the assets directory, this is the root of the assets folder
+    /// The assets directory, this is the root of the assets folder
     assets_directory: PathBuf,
-    /// the libraries directory, this is the root of the libraries folder
+    /// The libraries directory, this is the root of the libraries folder
     libraries_directory: PathBuf,
-    /// the path to <version>.json
+    /// The path to <version>.json
     version_manifest_path: PathBuf,
     /// is this version a snapshot
     is_snapshot: bool,
-    /// the version name
+    /// The version name
     version_name: String,
-    /// the client brand
-    client_branding: String,
-    /// the min/max amount of ram to use
+    /// The min/max amount of ram to use
     ram_size: RamSize,
-    /// the path to javaw.exe
+    /// The path to javaw.exe
     java_path: PathBuf,
-    /// the launcher name (e.g glowsquid)
+    /// The launcher name (e.g glowsquid)
     launcher_name: String,
+    /// The launcher version
+    launcher_version: String,
     /// If you want to launch with quickplay
     quickplay: Option<Quickplay>,
     /// The reqwest client
@@ -110,10 +111,10 @@ impl Launcher {
         version_manifest_path: PathBuf,
         is_snapshot: bool,
         version_name: String,
-        client_branding: String,
         ram_size: RamSize,
         java_path: PathBuf,
         launcher_name: String,
+        launcher_version: String,
         quickplay: Option<Quickplay>,
         http_client: Option<reqwest::Client>,
     ) -> Self {
@@ -127,10 +128,10 @@ impl Launcher {
             version_manifest_path,
             is_snapshot,
             version_name,
-            client_branding,
             ram_size,
             java_path,
             launcher_name,
+            launcher_version,
             quickplay,
             http_client: http_client.unwrap_or(reqwest::Client::new()),
         }
@@ -205,6 +206,13 @@ impl Launcher {
             "${natives_directory}",
             self.libraries_directory.to_str().unwrap_or_default(),
         )
+        .replace("${launcher_name}", &self.launcher_name)
+        .replace("${launcher_version}", &self.launcher_version)
+        .replace("${classpath}", &self.get_classpath())
+    }
+
+    fn get_classpath(&self) -> String {
+        todo!("implement classpath")
     }
 
     fn java_rule_passes(&self, rule: &client::JvmRule) -> bool {
@@ -214,17 +222,13 @@ impl Launcher {
                     return true;
                 };
 
-                match os.arch().map(String::as_str) {
-                    Some("x86") => {
-                        if !cfg!(target_arch = "x86") {
-                            return false;
-                        }
-                    }
+                let arch_rule = match os.arch().map(String::as_str) {
+                    Some("x86") => cfg!(target_arch = "x86"),
                     Some(_) => todo!("Unknown arch"),
-                    None => (),
-                }
+                    None => true,
+                };
 
-                match os.name().map(String::as_str) {
+                let os_rule = match os.name().map(String::as_str) {
                     // windows users pls test
                     #[cfg(target_os = "windows")]
                     Some("windows") => {
@@ -233,28 +237,20 @@ impl Launcher {
                                 panic!("unrecognised windows version: {:?}, please report to https://github.com/glowsquid-launcher/copper/issues with the version you are using", ver);
                             }
 
-                            return IsWindows10OrGreater().unwrap_or(false);
+                            IsWindows10OrGreater().unwrap_or(false)
                         } else {
-                            return true;
+                            true
                         }
                     }
                     #[cfg(not(target_os = "windows"))]
-                    Some("windows") => return false,
-                    Some("osx") => {
-                        if !cfg!(target_os = "macos") {
-                            return false;
-                        }
-                    }
-                    Some("linux") => {
-                        if !cfg!(target_os = "linux") {
-                            return false;
-                        }
-                    }
+                    Some("windows") => false,
+                    Some("osx") => cfg!(target_os = "macos"),
+                    Some("linux") => cfg!(target_os = "linux"),
                     Some(_) => todo!("Unknown os"),
-                    None => (),
-                }
+                    None => true,
+                };
 
-                true
+                arch_rule && os_rule
             }
             client::Action::Disallow => todo!("No disallow rules for jvm args"),
         }
@@ -317,60 +313,39 @@ impl Launcher {
             )
     }
 
+    fn quickplay_check<T: Fn(&Quickplay) -> bool>(&self, x: bool, qp: T) -> bool {
+        x == self.quickplay.as_ref().map(qp).unwrap_or_default()
+    }
+
     fn minecraft_rule_passes(&self, rule: &client::GameRule) -> bool {
         match rule.action() {
             client::Action::Allow => {
                 let features = rule.features();
+                let demo = iter::once(features.demo_user().map_or(true, |demo_user| {
+                    demo_user == self.authentication_details.is_demo_user
+                }));
 
-                if let Some(demo_user) = features.demo_user() {
-                    if demo_user != self.authentication_details.is_demo_user {
-                        return false;
-                    }
-                }
+                let support = iter::once(
+                    features
+                        .quick_plays_support()
+                        .map_or(true, |quick_plays_support| {
+                            quick_plays_support == self.quickplay.is_some()
+                        }),
+                );
 
-                if let Some(quick_plays_support) = features.quick_plays_support() {
-                    if quick_plays_support != self.quickplay.is_some() {
-                        return false;
-                    }
-                }
+                let rest = [
+                    features
+                        .quick_play_singleplayer()
+                        .map_or(true, |x| self.quickplay_check(x, |q| q.is_singleplayer())),
+                    features
+                        .quick_play_multiplayer()
+                        .map_or(true, |x| self.quickplay_check(x, |q| q.is_multiplayer())),
+                    features
+                        .quick_play_realms()
+                        .map_or(true, |x| self.quickplay_check(x, |q| q.is_realms())),
+                ];
 
-                if let Some(quick_play_singleplayer) = features.quick_play_singleplayer() {
-                    if quick_play_singleplayer
-                        != self
-                            .quickplay
-                            .as_ref()
-                            .map(|q| q.is_singleplayer())
-                            .unwrap_or_default()
-                    {
-                        return false;
-                    }
-                }
-
-                if let Some(quick_play_multiplayer) = features.quick_play_multiplayer() {
-                    if quick_play_multiplayer
-                        != self
-                            .quickplay
-                            .as_ref()
-                            .map(|q| q.is_multiplayer())
-                            .unwrap_or_default()
-                    {
-                        return false;
-                    }
-                }
-
-                if let Some(quick_play_realms) = features.quick_play_realms() {
-                    if quick_play_realms
-                        != self
-                            .quickplay
-                            .as_ref()
-                            .map(|q| q.is_realms())
-                            .unwrap_or_default()
-                    {
-                        return false;
-                    }
-                }
-
-                true
+                demo.chain(support).chain(rest.into_iter()).all(|x| x)
             }
             client::Action::Disallow => {
                 todo!("disallow rules are not supported yet, as none exist")
