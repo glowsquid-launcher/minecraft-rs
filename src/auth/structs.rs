@@ -66,7 +66,7 @@ pub(in crate::auth) struct MinecraftResponse {
     pub expires_in: i64,
 }
 
-#[derive(Redact)]
+#[derive(Redact, Clone)]
 pub struct MinecraftToken {
     pub username: String,
     #[redact]
@@ -74,7 +74,7 @@ pub struct MinecraftToken {
     pub expires_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MinecraftProfile {
     id: String,
     name: String,
@@ -83,12 +83,13 @@ pub struct MinecraftProfile {
 }
 
 impl MinecraftProfile {
+    #[must_use]
     pub fn id(&self) -> &str {
         self.id.as_ref()
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Skin {
     id: String,
     state: String,

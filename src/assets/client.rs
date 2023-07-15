@@ -53,7 +53,8 @@ impl Manifest {
             .change_context(SaveError::IOError)
     }
 
-    pub fn get_java_version(&self) -> u8 {
+    #[must_use]
+    pub const fn get_java_version(&self) -> u8 {
         match &self.java_version {
             Some(m) => m.major_version,
             None => 8,
@@ -85,15 +86,23 @@ pub struct Manifest {
 }
 
 impl Manifest {
+    /// Gets the arguments for a manifest
+    ///
+    /// # Panics
+    /// Panics if the manifest does not any types of arguments. This should never happen in a valid
+    /// manifest
+    #[must_use]
     pub fn get_arguments(&self) -> Args {
-        match &self.arguments {
-            Some(m) => Args::Arguments(m),
-            None => Args::MinecraftArguments(
-                self.minecraft_arguments
-                    .as_ref()
-                    .expect("Minecraft arguments to exist when arguments are not present"),
-            ),
-        }
+        self.arguments.as_ref().map_or_else(
+            || {
+                Args::MinecraftArguments(
+                    self.minecraft_arguments
+                        .as_ref()
+                        .expect("Minecraft arguments to exist when arguments are not present"),
+                )
+            },
+            Args::Arguments,
+        )
     }
 }
 
@@ -156,11 +165,13 @@ pub struct JvmRule {
 }
 
 impl JvmRule {
-    pub fn action(&self) -> &Action {
+    #[must_use]
+    pub const fn action(&self) -> &Action {
         &self.action
     }
 
-    pub fn os(&self) -> Option<&Os> {
+    #[must_use]
+    pub const fn os(&self) -> Option<&Os> {
         self.os.as_ref()
     }
 }
@@ -222,11 +233,13 @@ pub struct GameClass {
 }
 
 impl GameClass {
+    #[must_use]
     pub fn rules(&self) -> &[GameRule] {
         self.rules.as_ref()
     }
 
-    pub fn value(&self) -> &Value {
+    #[must_use]
+    pub const fn value(&self) -> &Value {
         &self.value
     }
 }
@@ -238,11 +251,13 @@ pub struct GameRule {
 }
 
 impl GameRule {
-    pub fn action(&self) -> &Action {
+    #[must_use]
+    pub const fn action(&self) -> &Action {
         &self.action
     }
 
-    pub fn features(&self) -> &Features {
+    #[must_use]
+    pub const fn features(&self) -> &Features {
         &self.features
     }
 }
@@ -258,27 +273,33 @@ pub struct Features {
 }
 
 impl Features {
-    pub fn demo_user(&self) -> Option<bool> {
+    #[must_use]
+    pub const fn demo_user(&self) -> Option<bool> {
         self.is_demo_user
     }
 
-    pub fn custom_resolution(&self) -> Option<bool> {
+    #[must_use]
+    pub const fn custom_resolution(&self) -> Option<bool> {
         self.has_custom_resolution
     }
 
-    pub fn quick_plays_support(&self) -> Option<bool> {
+    #[must_use]
+    pub const fn quick_plays_support(&self) -> Option<bool> {
         self.has_quick_plays_support
     }
 
-    pub fn quick_play_singleplayer(&self) -> Option<bool> {
+    #[must_use]
+    pub const fn quick_play_singleplayer(&self) -> Option<bool> {
         self.is_quick_play_singleplayer
     }
 
-    pub fn quick_play_multiplayer(&self) -> Option<bool> {
+    #[must_use]
+    pub const fn quick_play_multiplayer(&self) -> Option<bool> {
         self.is_quick_play_multiplayer
     }
 
-    pub fn quick_play_realms(&self) -> Option<bool> {
+    #[must_use]
+    pub const fn quick_play_realms(&self) -> Option<bool> {
         self.is_quick_play_realms
     }
 }
@@ -314,15 +335,18 @@ pub struct Os {
 }
 
 impl Os {
-    pub fn name(&self) -> Option<&String> {
+    #[must_use]
+    pub const fn name(&self) -> Option<&String> {
         self.name.as_ref()
     }
 
-    pub fn version(&self) -> Option<&String> {
+    #[must_use]
+    pub const fn version(&self) -> Option<&String> {
         self.version.as_ref()
     }
 
-    pub fn arch(&self) -> Option<&String> {
+    #[must_use]
+    pub const fn arch(&self) -> Option<&String> {
         self.arch.as_ref()
     }
 }
@@ -348,10 +372,12 @@ pub struct JvmClassRule {
 }
 
 impl JvmClassRule {
-    pub fn value(&self) -> &Value {
+    #[must_use]
+    pub const fn value(&self) -> &Value {
         &self.value
     }
 
+    #[must_use]
     pub fn rules(&self) -> &[JvmRule] {
         self.rules.as_ref()
     }
@@ -364,10 +390,12 @@ pub struct Arguments {
 }
 
 impl Arguments {
+    #[must_use]
     pub fn game(&self) -> &[Game] {
         self.game.as_ref()
     }
 
+    #[must_use]
     pub fn jvm(&self) -> &[Jvm] {
         self.jvm.as_ref()
     }

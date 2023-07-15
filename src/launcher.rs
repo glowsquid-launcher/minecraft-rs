@@ -1,6 +1,6 @@
+use derive_builder::Builder;
 use std::{
     io::BufReader,
-    iter,
     path::PathBuf,
     process::{ChildStderr, ChildStdout, ExitStatus},
 };
@@ -16,7 +16,7 @@ use crate::{
     auth::structs::{MinecraftProfile, MinecraftToken},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthenticationDetails {
     pub auth_details: MinecraftToken,
     pub minecraft_profile: MinecraftProfile,
@@ -24,13 +24,13 @@ pub struct AuthenticationDetails {
     pub is_demo_user: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CustomResolution {
     pub width: i32,
     pub height: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RamSize {
     pub min: String,
     pub max: String,
@@ -42,7 +42,7 @@ pub struct GameOutput {
     pub exit_handle: JoinHandle<Option<ExitStatus>>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Quickplay {
     /// Singleplayer quickplay. Inner value is a world name
     Singleplayer(String),
@@ -53,20 +53,24 @@ pub enum Quickplay {
 }
 
 impl Quickplay {
-    pub fn is_singleplayer(&self) -> bool {
+    #[must_use]
+    pub const fn is_singleplayer(&self) -> bool {
         matches!(self, Self::Singleplayer(_))
     }
 
-    pub fn is_multiplayer(&self) -> bool {
+    #[must_use]
+    pub const fn is_multiplayer(&self) -> bool {
         matches!(self, Self::Multiplayer(_))
     }
 
-    pub fn is_realms(&self) -> bool {
+    #[must_use]
+    pub const fn is_realms(&self) -> bool {
         matches!(self, Self::Realms(_))
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Builder)]
+#[builder(setter(into))]
 pub struct Launcher {
     /// The authentication details (username, uuid, access token, xbox uid, etc)
     authentication_details: AuthenticationDetails,
@@ -101,42 +105,7 @@ pub struct Launcher {
 }
 
 impl Launcher {
-    pub fn new(
-        authentication_details: AuthenticationDetails,
-        custom_resolution: Option<CustomResolution>,
-        jar_path: PathBuf,
-        game_directory: PathBuf,
-        assets_directory: PathBuf,
-        libraries_directory: PathBuf,
-        version_manifest_path: PathBuf,
-        is_snapshot: bool,
-        version_name: String,
-        ram_size: RamSize,
-        java_path: PathBuf,
-        launcher_name: String,
-        launcher_version: String,
-        quickplay: Option<Quickplay>,
-        http_client: Option<reqwest::Client>,
-    ) -> Self {
-        Self {
-            authentication_details,
-            custom_resolution,
-            jar_path,
-            game_directory,
-            assets_directory,
-            libraries_directory,
-            version_manifest_path,
-            is_snapshot,
-            version_name,
-            ram_size,
-            java_path,
-            launcher_name,
-            launcher_version,
-            quickplay,
-            http_client: http_client.unwrap_or(reqwest::Client::new()),
-        }
-    }
-
+    #[must_use]
     pub fn parse_minecraft_args(&self, manifest: &client::Manifest) -> String {
         let args = manifest.get_arguments();
 
@@ -157,7 +126,7 @@ impl Launcher {
                                 .all(|rule| self.minecraft_rule_passes(rule));
 
                             if !passes {
-                                return "".to_string();
+                                return String::new();
                             };
 
                             match class.value() {
@@ -173,10 +142,10 @@ impl Launcher {
             }
         }
     }
-
+    #[must_use]
     pub fn parse_jvm_args(&self, manifest: &client::Manifest) -> String {
         let Args::Arguments(args) = manifest.get_arguments() else {
-            return "".to_string();
+            return String::new();
         };
 
         let jvm = args.jvm();
@@ -187,11 +156,11 @@ impl Launcher {
                     let passes = class.rules().iter().all(|rule| self.java_rule_passes(rule));
 
                     if !passes {
-                        return "".to_string();
+                        return String::new();
                     };
 
                     match class.value() {
-                        client::Value::String(s) => self.parse_java_arg_str(&s),
+                        client::Value::String(s) => self.parse_java_arg_str(s),
                         client::Value::StringArray(a) => {
                             a.iter().map(|v| self.parse_java_arg_str(v)).join(" ")
                         }
@@ -264,7 +233,7 @@ impl Launcher {
             )
             .replace(
                 "${version_name}",
-                &self.version_name.replace(" ", "_").replace(":", "_"),
+                &self.version_name.replace([' ', ':'], "_"),
             )
             .replace(
                 "${game_directory}",
@@ -276,11 +245,11 @@ impl Launcher {
             )
             .replace(
                 "${assets_index_name}",
-                &self.version_name.replace(" ", "_").replace(":", "_"),
+                &self.version_name.replace([' ', ':'], "_"),
             )
             .replace(
                 "${auth_uuid}",
-                &self.authentication_details.minecraft_profile.id(),
+                self.authentication_details.minecraft_profile.id(),
             )
             .replace(
                 "${auth_access_token}",
@@ -321,31 +290,35 @@ impl Launcher {
         match rule.action() {
             client::Action::Allow => {
                 let features = rule.features();
-                let demo = iter::once(features.demo_user().map_or(true, |demo_user| {
+
+                let demo_check = features.demo_user().map_or(true, |demo_user| {
                     demo_user == self.authentication_details.is_demo_user
-                }));
+                });
 
-                let support = iter::once(
-                    features
-                        .quick_plays_support()
-                        .map_or(true, |quick_plays_support| {
-                            quick_plays_support == self.quickplay.is_some()
-                        }),
-                );
+                let support_check = features
+                    .quick_plays_support()
+                    .map_or(true, |quick_plays_support| {
+                        quick_plays_support == self.quickplay.is_some()
+                    });
 
-                let rest = [
-                    features
-                        .quick_play_singleplayer()
-                        .map_or(true, |x| self.quickplay_check(x, |q| q.is_singleplayer())),
-                    features
-                        .quick_play_multiplayer()
-                        .map_or(true, |x| self.quickplay_check(x, |q| q.is_multiplayer())),
-                    features
-                        .quick_play_realms()
-                        .map_or(true, |x| self.quickplay_check(x, |q| q.is_realms())),
-                ];
+                let quickplay_singleplayer_check =
+                    features.quick_play_singleplayer().map_or(true, |x| {
+                        self.quickplay_check(x, Quickplay::is_singleplayer)
+                    });
 
-                demo.chain(support).chain(rest.into_iter()).all(|x| x)
+                let quickplay_multiplayer_check = features
+                    .quick_play_multiplayer()
+                    .map_or(true, |x| self.quickplay_check(x, Quickplay::is_multiplayer));
+
+                let quickplay_realms_check = features
+                    .quick_play_realms()
+                    .map_or(true, |x| self.quickplay_check(x, Quickplay::is_realms));
+
+                demo_check
+                    && support_check
+                    && quickplay_singleplayer_check
+                    && quickplay_multiplayer_check
+                    && quickplay_realms_check
             }
             client::Action::Disallow => {
                 todo!("disallow rules are not supported yet, as none exist")
