@@ -60,11 +60,16 @@ impl Manifest {
             None => 8,
         }
     }
+
+    #[must_use]
+    pub fn libraries(&self) -> &[Library] {
+        self.libraries.as_ref()
+    }
 }
 
 // Thank you quicktype, very cool :ferrisBased:
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Manifest {
     asset_index: AssetIndex,
@@ -111,14 +116,14 @@ pub enum Args<'a> {
     Arguments(&'a Arguments),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum Type {
     Release,
     Snapshot,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AssetIndex {
     id: String,
@@ -128,7 +133,7 @@ pub struct AssetIndex {
     url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Downloads {
     client: DownloadClass,
     server: DownloadClass,
@@ -138,14 +143,14 @@ pub struct Downloads {
     windows_server: Option<DownloadClass>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadClass {
     sha1: String,
     size: i64,
     url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Artifact {
     path: String,
     sha1: String,
@@ -153,12 +158,12 @@ pub struct Artifact {
     url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Extract {
     exclude: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JvmRule {
     action: Action,
     os: Option<Os>,
@@ -174,9 +179,50 @@ impl JvmRule {
     pub const fn os(&self) -> Option<&Os> {
         self.os.as_ref()
     }
+
+    pub fn java_rule_passes(&self) -> bool {
+        match self.action() {
+            Action::Allow => {
+                let Some(os) = self.os() else {
+                    return true;
+                };
+
+                let arch_rule = match os.arch().map(String::as_str) {
+                    Some("x86") => cfg!(target_arch = "x86"),
+                    Some(_) => todo!("Unknown arch"),
+                    None => true,
+                };
+
+                let os_rule = match os.name().map(String::as_str) {
+                    // windows users pls test
+                    #[cfg(target_os = "windows")]
+                    Some("windows") => {
+                        if let Some(ver) = &rule.os.version {
+                            if ver != "^10\\." {
+                                panic!("unrecognised windows version: {:?}, please report to https://github.com/glowsquid-launcher/copper/issues with the version you are using", ver);
+                            }
+
+                            IsWindows10OrGreater().unwrap_or(false)
+                        } else {
+                            true
+                        }
+                    }
+                    #[cfg(not(target_os = "windows"))]
+                    Some("windows") => false,
+                    Some("osx") => cfg!(target_os = "macos"),
+                    Some("linux") => cfg!(target_os = "linux"),
+                    Some(_) => todo!("Unknown os"),
+                    None => true,
+                };
+
+                arch_rule && os_rule
+            }
+            Action::Disallow => todo!("No disallow rules for jvm args"),
+        }
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
     Allow,
@@ -190,19 +236,19 @@ pub enum Name {
     Linux,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct JavaVersion {
     component: String,
     major_version: u8,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Logging {
     client: LoggingClient,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub struct LoggingClient {
     argument: String,
@@ -211,7 +257,7 @@ pub struct LoggingClient {
     client_type: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct File {
     id: String,
     sha1: String,
@@ -219,14 +265,14 @@ pub struct File {
     url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum Game {
     GameClass(GameClass),
     String(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GameClass {
     rules: Vec<GameRule>,
     value: Value,
@@ -244,7 +290,7 @@ impl GameClass {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GameRule {
     action: Action,
     features: Features,
@@ -262,7 +308,7 @@ impl GameRule {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Features {
     is_demo_user: Option<bool>,
     has_custom_resolution: Option<bool>,
@@ -304,14 +350,14 @@ impl Features {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum Value {
     String(String),
     StringArray(Vec<String>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Classifiers {
     natives_linux: Option<Artifact>,
@@ -320,14 +366,14 @@ pub struct Classifiers {
     natives_osx: Option<Artifact>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Natives {
     linux: Option<String>,
     osx: Option<String>,
     windows: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Os {
     name: Option<String>,
     version: Option<String>,
@@ -351,21 +397,21 @@ impl Os {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Mappings {
     sha1: String,
     size: i64,
     url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum Jvm {
     String(String),
     Class(JvmClassRule),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JvmClassRule {
     rules: Vec<JvmRule>,
     value: Value,
@@ -383,7 +429,7 @@ impl JvmClassRule {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Arguments {
     game: Vec<Game>,
     jvm: Vec<Jvm>,
@@ -401,7 +447,7 @@ impl Arguments {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Library {
     downloads: LibraryDownloads,
     name: String,
@@ -410,7 +456,7 @@ pub struct Library {
     extract: Option<Extract>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LibraryDownloads {
     /// Seemingly not present in version 1 and 2?
     artifact: Option<Artifact>,

@@ -15,6 +15,7 @@ categories = ["api-bindings"]
 [dependencies]
 chrono = { version = "0.4.26", default-features = false, features = ["std"] }
 derive_builder = { version = "0.12.0", features = ["clippy"] }
+dunce = "1.0.4"
 error-stack = { version = "0.3.1", features = ["spantrace"] }
 itertools = "0.11.0"
 oauth2 = "4.4.1"

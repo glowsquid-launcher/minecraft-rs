@@ -1,6 +1,3 @@
 /target
-/tests-dir
 /.direnv
-!/tests-dir/.gitkeep
 
-copper-cli/fabricloader.log
