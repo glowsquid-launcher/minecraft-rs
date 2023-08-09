@@ -1,20 +1,28 @@
+use std::iter;
+
 use itertools::Itertools;
+use tracing::debug;
 
 use crate::{
     assets::client::{self, Args, Artifact, Classifiers, Library, Rule},
     launcher::{Launcher, Quickplay},
 };
 
-struct JvmArgsParser<'a> {
+pub struct JvmArgs<'a> {
     launcher: &'a Launcher,
     manifest: &'a client::Manifest,
 }
 
-impl JvmArgsParser<'_> {
+impl<'a> JvmArgs<'a> {
     #[must_use]
-    pub fn parse_jvm_args(&self) -> String {
+    pub const fn new(launcher: &'a Launcher, manifest: &'a client::Manifest) -> Self {
+        Self { launcher, manifest }
+    }
+
+    #[must_use]
+    pub fn parse_jvm_args(&self) -> Vec<String> {
         let Args::Arguments(args) = self.manifest.get_arguments() else {
-            return String::new();
+            return Vec::new();
         };
 
         let jvm = args.jvm();
@@ -36,7 +44,8 @@ impl JvmArgsParser<'_> {
                     }
                 }
             })
-            .join(" ")
+            .filter(|s| !s.is_empty())
+            .collect()
     }
 
     fn parse_java_arg_str(&self, arg: &str) -> String {
@@ -59,6 +68,9 @@ impl JvmArgsParser<'_> {
             .iter()
             .filter(|lib| lib.check_rules_passes())
             .flat_map(|lib| self.get_lib_path(lib))
+            .chain(iter::once(
+                self.launcher.jar_path().to_str().unwrap().to_string(),
+            ))
             .join(if cfg!(windows) { ";" } else { ":" })
     }
 
@@ -81,21 +93,30 @@ impl JvmArgsParser<'_> {
     }
 }
 
-struct MinecraftArgsParser<'a> {
+pub struct MinecraftArgs<'a> {
     launcher: &'a Launcher,
     manifest: &'a client::Manifest,
 }
 
-impl MinecraftArgsParser<'_> {
+impl<'a> MinecraftArgs<'a> {
     #[must_use]
-    pub fn parse_minecraft_args(&self) -> String {
+    pub const fn new(launcher: &'a Launcher, manifest: &'a client::Manifest) -> Self {
+        Self { launcher, manifest }
+    }
+
+    #[must_use]
+    #[tracing::instrument(skip(self))]
+    pub fn parse_minecraft_args(&self) -> Vec<String> {
+        debug!("Parsing minecraft args");
         let args = self.manifest.get_arguments();
 
         match args {
             client::Args::MinecraftArguments(minecraft_args) => {
-                self.parse_minecraft_arg_str(minecraft_args)
+                debug!("Minecraft args: {}", minecraft_args);
+                vec![self.parse_minecraft_arg_str(minecraft_args)]
             }
             client::Args::Arguments(args) => {
+                debug!("Arguments: {:?}", args);
                 let game_args = args.game();
 
                 game_args
@@ -118,14 +139,18 @@ impl MinecraftArgsParser<'_> {
                                 }
                             }
                         }
-                        client::Game::String(arg) => arg.to_string(),
+                        client::Game::String(arg) => self.parse_minecraft_arg_str(arg),
                     })
-                    .join(" ")
+                    .filter(|s| !s.is_empty())
+                    .collect()
             }
         }
     }
 
+    #[tracing::instrument(skip(self))]
     fn parse_minecraft_arg_str(&self, minecraft_arg: &str) -> String {
+        debug!("Parsing minecraft arg: {}", minecraft_arg);
+
         minecraft_arg
             .replace(
                 "${auth_player_name}",
@@ -226,11 +251,16 @@ impl MinecraftArgsParser<'_> {
                     .quick_play_realms()
                     .map_or(true, |x| self.quickplay_check(x, Quickplay::is_realms));
 
+                let custom_resolution_check = features
+                    .custom_resolution()
+                    .map_or(true, |x| x == self.launcher.custom_resolution().is_some());
+
                 demo_check
                     && support_check
                     && quickplay_singleplayer_check
                     && quickplay_multiplayer_check
                     && quickplay_realms_check
+                    && custom_resolution_check
             }
             client::Action::Disallow => {
                 todo!("disallow rules are not supported yet, as none exist")

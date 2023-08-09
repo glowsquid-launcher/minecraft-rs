@@ -1,16 +1,19 @@
 use derive_builder::Builder;
 use error_stack::{IntoReport, Result, ResultExt};
 use std::{
-    io::BufReader,
+    error::Error,
+    fmt::{self, Display, Formatter},
     path::PathBuf,
-    process::{ChildStderr, ChildStdout, ExitStatus},
+    process::{ExitStatus, Stdio},
     sync::Arc,
 };
 use tokio::{
+    io::BufReader,
+    process::{ChildStderr, ChildStdout, Command},
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 #[cfg(target_os = "windows")]
 use winsafe::IsWindows10OrGreater;
@@ -21,6 +24,7 @@ use crate::{
         client::{self, Artifact, ClassDownloader, DownloadClass, Library, LibraryDownloader},
     },
     auth::structs::{MinecraftProfile, MinecraftToken},
+    parser::{JvmArgs, MinecraftArgs},
     DownloadError, DownloadMessage, Downloader as DownloaderTrait,
 };
 
@@ -113,8 +117,77 @@ pub struct Launcher {
     manifest: client::Manifest,
 }
 
+#[derive(Debug)]
+pub enum LauncherError {
+    CannotGetStdout,
+    CannotGetStderr,
+    ProcessError,
+}
+
+impl Display for LauncherError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::CannotGetStdout => "Cannot get stdout",
+            Self::CannotGetStderr => "Cannot get stderr",
+            Self::ProcessError => "Process error",
+        })
+    }
+}
+
+impl Error for LauncherError {}
+
 /// High-level API
-impl Launcher {}
+impl Launcher {
+    /// Launches the game, assuming all the required files are downloaded
+    ///
+    /// # Errors
+    /// If the process cannot be spawned, or the stdout/stderr cannot be read
+    #[tracing::instrument(skip(self))]
+    pub fn launch(&self) -> Result<GameOutput, LauncherError> {
+        debug!("Launching game");
+
+        let mut game_args = MinecraftArgs::new(self, &self.manifest).parse_minecraft_args();
+        let mut jvm_args = JvmArgs::new(self, &self.manifest).parse_jvm_args();
+
+        debug!("Game args: {:?}", game_args);
+        debug!("JVM args: {:?}", jvm_args);
+
+        let main_class = self.manifest.main_class();
+
+        debug!("Main class: {}", main_class);
+
+        let mut process = Command::new(self.java_path.clone())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .args(&mut jvm_args)
+            .arg(main_class)
+            .args(&mut game_args)
+            .spawn()
+            .into_report()
+            .change_context(LauncherError::ProcessError)?;
+
+        let stdout = process
+            .stdout
+            .take()
+            .ok_or(LauncherError::CannotGetStdout)?;
+
+        let stderr = process
+            .stderr
+            .take()
+            .ok_or(LauncherError::CannotGetStderr)?;
+
+        let out_reader = BufReader::new(stdout);
+        let err_reader = BufReader::new(stderr);
+
+        let exit = tokio::spawn(async move { process.wait().await.ok() });
+
+        Ok(GameOutput {
+            stderr: err_reader,
+            stdout: out_reader,
+            exit_handle: exit,
+        })
+    }
+}
 
 #[derive(Debug)]
 pub enum DownloadItem {
@@ -352,6 +425,11 @@ impl Launcher {
     #[must_use]
     pub const fn custom_resolution(&self) -> Option<&CustomResolution> {
         self.custom_resolution.as_ref()
+    }
+
+    #[must_use]
+    pub const fn jar_path(&self) -> &PathBuf {
+        &self.jar_path
     }
 
     #[must_use]

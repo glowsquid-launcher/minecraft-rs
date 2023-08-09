@@ -139,6 +139,12 @@ impl Manifest {
     pub const fn asset_index(&self) -> &AssetIndex {
         &self.asset_index
     }
+
+    /// Gets the main class for a manifest
+    #[must_use]
+    pub fn main_class(&self) -> &str {
+        &self.main_class
+    }
 }
 
 pub enum Args<'a> {

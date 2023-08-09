@@ -22,8 +22,8 @@ use copper::{
 use error_stack::Report;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use oauth2::{CsrfToken, PkceCodeVerifier};
-use tokio::sync::mpsc;
-use tracing::info;
+use tokio::{io::AsyncBufReadExt, sync::mpsc};
+use tracing::{error, info};
 use tracing_subscriber::{fmt::format::PrettyFields, prelude::*};
 
 extern crate axum;
@@ -256,7 +256,29 @@ async fn main() {
 
     task.await.unwrap();
 
-    info!("Done downloading files");
+    info!("Done downloading files. Launching the game");
+
+    let game_manager = launcher.launch().unwrap();
+
+    let stdout_task = tokio::spawn(async move {
+        let mut lines = game_manager.stdout.lines();
+        while let Some(buf) = lines.next_line().await.unwrap() {
+            info!("STDOUT: {}", buf);
+        }
+    });
+
+    let stderr_task = tokio::spawn(async move {
+        let mut lines = game_manager.stderr.lines();
+        while let Some(line) = lines.next_line().await.unwrap() {
+            error!("STDERR: {}", line);
+        }
+    });
+
+    info!("Game launched. Waiting for it to exit");
+
+    stdout_task.await.unwrap();
+    stderr_task.await.unwrap();
+    game_manager.exit_handle.await.unwrap();
 }
 
 async fn shutdown_server(mut signal_to_shutdown: mpsc::Receiver<()>) {
