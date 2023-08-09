@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    assets::client::{self, Args, JvmRule},
+    assets::client::{self, Args, Artifact, Classifiers, Library, Rule},
     launcher::{Launcher, Quickplay},
 };
 
@@ -22,7 +22,7 @@ impl JvmArgsParser<'_> {
             .map(|arg| match arg {
                 client::Jvm::String(arg) => self.parse_java_arg_str(arg),
                 client::Jvm::Class(class) => {
-                    let passes = class.rules().iter().all(JvmRule::java_rule_passes);
+                    let passes = class.rules().iter().all(Rule::passes);
 
                     if !passes {
                         return String::new();
@@ -54,7 +54,30 @@ impl JvmArgsParser<'_> {
 
     fn get_classpath(&self) -> String {
         let libraries = self.manifest.libraries();
-        todo!("implement classpath")
+
+        libraries
+            .iter()
+            .filter(|lib| lib.check_rules_passes())
+            .flat_map(|lib| self.get_lib_path(lib))
+            .join(if cfg!(windows) { ";" } else { ":" })
+    }
+
+    fn get_lib_path(&self, lib: &Library) -> Vec<String> {
+        let download = lib.downloads();
+
+        let paths = [
+            download.classifiers().and_then(Classifiers::current_os),
+            download.artifact(),
+        ];
+
+        paths
+            .into_iter()
+            .flatten()
+            .map(Artifact::path)
+            .map(|path| self.launcher.libraries_directory().join(path))
+            .filter_map(|path| dunce::canonicalize(path).ok())
+            .filter_map(|path| path.to_str().map(ToString::to_string))
+            .collect()
     }
 }
 

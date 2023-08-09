@@ -95,7 +95,7 @@ pub struct Skin {
     state: String,
     url: String,
     variant: String,
-    alias: String,
+    alias: Option<String>,
 }
 
 impl From<MinecraftResponse> for MinecraftToken {

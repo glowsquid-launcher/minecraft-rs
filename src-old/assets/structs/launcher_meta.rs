@@ -71,10 +71,11 @@ impl Latest {
     }
 }
 
+const server_url: &str = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
+
 impl LauncherMeta {
     #[tracing::instrument]
     pub async fn download_meta() -> Result<Self, reqwest::Error> {
-        let server_url = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
         debug!("Downloading launcher meta from {}", server_url);
 
         reqwest::get(server_url).await?.json::<LauncherMeta>().await

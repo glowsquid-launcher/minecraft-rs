@@ -1,26 +1,33 @@
 use derive_builder::Builder;
+use error_stack::{IntoReport, Result, ResultExt};
 use std::{
     io::BufReader,
     path::PathBuf,
     process::{ChildStderr, ChildStdout, ExitStatus},
+    sync::Arc,
 };
-
-use itertools::Itertools;
-use tokio::task::JoinHandle;
+use tokio::{
+    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+    task::JoinHandle,
+};
+use tracing::{debug, error};
 
 #[cfg(target_os = "windows")]
 use winsafe::IsWindows10OrGreater;
 
 use crate::{
-    assets::client,
+    assets::{
+        asset_index::{AssetDownloader, Assets, Object},
+        client::{self, Artifact, ClassDownloader, DownloadClass, Library, LibraryDownloader},
+    },
     auth::structs::{MinecraftProfile, MinecraftToken},
+    DownloadError, DownloadMessage, Downloader as DownloaderTrait,
 };
 
 #[derive(Debug, Clone)]
 pub struct AuthenticationDetails {
     pub auth_details: MinecraftToken,
     pub minecraft_profile: MinecraftProfile,
-    pub client_id: Option<String>,
     pub is_demo_user: bool,
 }
 
@@ -76,7 +83,7 @@ pub struct Launcher {
     authentication_details: AuthenticationDetails,
     /// A custom resolution to use instead of the default
     custom_resolution: Option<CustomResolution>,
-    /// The minecraft jar file path
+    /// The path to the client.jar file
     jar_path: PathBuf,
     /// The root .minecraft folder
     game_directory: PathBuf,
@@ -106,6 +113,236 @@ pub struct Launcher {
     manifest: client::Manifest,
 }
 
+/// High-level API
+impl Launcher {}
+
+#[derive(Debug)]
+pub enum DownloadItem {
+    Asset(Object),
+    Library(Artifact),
+    Client(DownloadClass),
+}
+
+#[derive(Debug, Clone)]
+pub struct Downloader {
+    /// The sender for the download channel
+    sender: Option<UnboundedSender<DownloadMessage<DownloadItem>>>,
+
+    asset_downloader: AssetDownloader,
+    library_downloader: LibraryDownloader,
+    client_download: ClassDownloader,
+}
+
+impl Downloader {
+    #[must_use]
+    pub fn new(
+        launcher: &Launcher,
+        assets: Assets,
+        libraries: Vec<Library>,
+        max_concurrent_downloads: usize,
+    ) -> Self {
+        let asset_downloader = AssetDownloader::new(
+            assets,
+            launcher.assets_directory.clone(),
+            launcher.http_client.clone(),
+            max_concurrent_downloads / 2,
+        );
+
+        let library_downloader = LibraryDownloader::new(
+            libraries,
+            launcher.libraries_directory.clone(),
+            launcher.http_client.clone(),
+            max_concurrent_downloads / 2,
+        );
+
+        let class_downloader = ClassDownloader::new(
+            launcher.http_client.clone(),
+            launcher.manifest.downloads().client().clone(),
+            launcher.jar_path.clone(),
+        );
+
+        Self {
+            sender: None,
+            asset_downloader,
+            library_downloader,
+            client_download: class_downloader,
+        }
+    }
+}
+
+/// Downloads _everything_ needed to launch the game
+impl DownloaderTrait for Downloader {
+    type DownloadItem = DownloadItem;
+
+    #[allow(clippy::too_many_lines)]
+    fn create_channel(&mut self) -> UnboundedReceiver<DownloadMessage<Self::DownloadItem>> {
+        let (sender, reciever) = mpsc::unbounded_channel();
+        self.sender = Some(sender);
+
+        // hook up the asset downloader
+        let mut asset_downloader_channel = self.asset_downloader.create_channel();
+        let asset_sender = self.sender.clone().unwrap();
+
+        tokio::spawn(async move {
+            while let Some(message) = asset_downloader_channel.recv().await {
+                match message {
+                    DownloadMessage::Downloaded(object) => {
+                        debug!("Asset downloader object {} downloaded", object.hash());
+                        let hash = object.hash().to_owned();
+
+                        if let Err(e) = asset_sender
+                            .send(DownloadMessage::Downloaded(DownloadItem::Asset(object)))
+                        {
+                            error!(
+                                "Asset downloader failed to send object {} downloaded: {}",
+                                hash, e
+                            );
+                        }
+                    }
+                    DownloadMessage::DownloadProgress(object, download_progress) => {
+                        debug!(
+                            "Asset downloader object {} progress: {}",
+                            object.hash(),
+                            download_progress
+                        );
+                        let hash = object.hash().to_owned();
+
+                        if let Err(e) = asset_sender.send(DownloadMessage::DownloadProgress(
+                            DownloadItem::Asset(object),
+                            download_progress,
+                        )) {
+                            error!(
+                                "Asset downloader failed to send object {} progress: {}",
+                                hash, e
+                            );
+                        }
+                    }
+                    DownloadMessage::DownloadedAll => {
+                        debug!("Asset downloader finished downloading all assets");
+                    }
+                }
+            }
+        });
+
+        // hook up the library downloader
+        let mut library_downloader_channel = self.library_downloader.create_channel();
+        let library_sender = self.sender.clone().unwrap();
+
+        tokio::spawn(async move {
+            while let Some(message) = library_downloader_channel.recv().await {
+                match message {
+                    DownloadMessage::Downloaded(object) => {
+                        debug!("Library downloader object {} downloaded", object.sha1());
+                        let hash = object.sha1().to_owned();
+
+                        if let Err(e) = library_sender
+                            .send(DownloadMessage::Downloaded(DownloadItem::Library(object)))
+                        {
+                            error!(
+                                "Library downloader failed to send object {} downloaded: {}",
+                                hash, e
+                            );
+                        }
+                    }
+                    DownloadMessage::DownloadProgress(object, download_progress) => {
+                        debug!(
+                            "Library downloader object {} progress: {}",
+                            object.sha1(),
+                            download_progress
+                        );
+                        let hash = object.sha1().to_owned();
+
+                        if let Err(e) = library_sender.send(DownloadMessage::DownloadProgress(
+                            DownloadItem::Library(object),
+                            download_progress,
+                        )) {
+                            error!(
+                                "Library downloader failed to send object {} progress: {}",
+                                hash, e
+                            );
+                        }
+                    }
+                    DownloadMessage::DownloadedAll => {
+                        debug!("Library downloader finished downloading all assets");
+                    }
+                }
+            }
+        });
+
+        // hook up the class downloader
+        let mut class_downloader_channel = self.client_download.create_channel();
+        let class_sender = self.sender.clone().unwrap();
+
+        tokio::spawn(async move {
+            while let Some(message) = class_downloader_channel.recv().await {
+                match message {
+                    DownloadMessage::Downloaded(object) => {
+                        debug!("Client downloaded");
+
+                        if let Err(e) = class_sender
+                            .send(DownloadMessage::Downloaded(DownloadItem::Client(object)))
+                        {
+                            error!("Client downloader failed to send downloaded: {}", e);
+                        }
+                    }
+                    DownloadMessage::DownloadProgress(object, download_progress) => {
+                        debug!("Client progress: {}", download_progress);
+
+                        if let Err(e) = class_sender.send(DownloadMessage::DownloadProgress(
+                            DownloadItem::Client(object),
+                            download_progress,
+                        )) {
+                            error!("Client downloader failed to send progress: {}", e);
+                        }
+                    }
+                    DownloadMessage::DownloadedAll => {
+                        debug!("Client downloader finished downloading client");
+                    }
+                }
+            }
+        });
+
+        reciever
+    }
+
+    async fn download(&self, item: Self::DownloadItem) -> Result<(), DownloadError> {
+        match item {
+            DownloadItem::Asset(object) => self.asset_downloader.download(object).await,
+            DownloadItem::Library(library) => self.library_downloader.download(library).await,
+            DownloadItem::Client(client) => self.client_download.download(client).await,
+        }
+    }
+
+    async fn download_all(self: Arc<Self>) -> Result<(), DownloadError> {
+        let asset_downloader = Arc::new(self.asset_downloader.clone());
+        let library_downloader = Arc::new(self.library_downloader.clone());
+        let client_downloader = Arc::new(self.client_download.clone());
+
+        let assets = tokio::spawn(async move { asset_downloader.download_all().await });
+        let libraries = tokio::spawn(async move { library_downloader.download_all().await });
+        let client = tokio::spawn(async move { client_downloader.download_all().await });
+
+        // wait for both to finish
+        let (assets, libraries, client) = tokio::try_join!(assets, libraries, client)
+            .into_report()
+            .change_context(DownloadError::JoinError)?;
+
+        assets?;
+        libraries?;
+        client?;
+
+        self.sender
+            .as_ref()
+            .unwrap()
+            .send(DownloadMessage::DownloadedAll)
+            .into_report()
+            .change_context(DownloadError::ChannelError)?;
+
+        Ok(())
+    }
+}
+
+/// Getter methods
 impl Launcher {
     #[must_use]
     pub const fn authentication_details(&self) -> &AuthenticationDetails {
@@ -115,11 +352,6 @@ impl Launcher {
     #[must_use]
     pub const fn custom_resolution(&self) -> Option<&CustomResolution> {
         self.custom_resolution.as_ref()
-    }
-
-    #[must_use]
-    pub const fn jar_path(&self) -> &PathBuf {
-        &self.jar_path
     }
 
     #[must_use]

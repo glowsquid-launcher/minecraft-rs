@@ -110,6 +110,13 @@ impl Version {
     }
 }
 
+impl Version {
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Type {
