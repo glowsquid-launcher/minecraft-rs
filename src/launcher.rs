@@ -13,7 +13,7 @@ use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 #[cfg(target_os = "windows")]
 use winsafe::IsWindows10OrGreater;
@@ -23,13 +23,17 @@ use crate::{
         asset_index::{AssetDownloader, Assets, Object},
         client::{self, Artifact, ClassDownloader, DownloadClass, Library, LibraryDownloader},
     },
-    auth::structs::{MinecraftProfile, MinecraftToken},
+    auth::{
+        structs::{MinecraftProfile, MinecraftToken},
+        MSauth,
+    },
     parser::{JvmArgs, MinecraftArgs},
     DownloadError, DownloadMessage, Downloader as DownloaderTrait,
 };
 
 #[derive(Debug, Clone)]
 pub struct AuthenticationDetails {
+    pub authenticator: MSauth,
     pub auth_details: MinecraftToken,
     pub minecraft_profile: MinecraftProfile,
     pub is_demo_user: bool,
@@ -122,6 +126,7 @@ pub enum LauncherError {
     CannotGetStdout,
     CannotGetStderr,
     ProcessError,
+    AuthError,
 }
 
 impl Display for LauncherError {
@@ -130,6 +135,7 @@ impl Display for LauncherError {
             Self::CannotGetStdout => "Cannot get stdout",
             Self::CannotGetStderr => "Cannot get stderr",
             Self::ProcessError => "Process error",
+            Self::AuthError => "Authentication Error",
         })
     }
 }
@@ -143,8 +149,16 @@ impl Launcher {
     /// # Errors
     /// If the process cannot be spawned, or the stdout/stderr cannot be read
     #[tracing::instrument(skip(self))]
-    pub fn launch(&self) -> Result<GameOutput, LauncherError> {
+    pub async fn launch(&mut self) -> Result<GameOutput, LauncherError> {
         debug!("Launching game");
+
+        if self.authentication_details.auth_details.is_expired() {
+            self.authentication_details
+                .auth_details
+                .refresh(&self.authentication_details.authenticator)
+                .await
+                .change_context(LauncherError::AuthError)?;
+        }
 
         let mut game_args = MinecraftArgs::new(self, &self.manifest).parse_minecraft_args();
         let mut jvm_args = JvmArgs::new(self, &self.manifest).parse_jvm_args();

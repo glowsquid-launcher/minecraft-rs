@@ -1,7 +1,18 @@
-use chrono::{DateTime, Duration, Utc};
-use oauth2::{AuthorizationCode, CsrfToken};
+use std::{error::Error, fmt::Display};
+
+use chrono::{DateTime, Utc};
+use error_stack::{Result, ResultExt};
+use oauth2::{
+    basic::BasicTokenType, AuthorizationCode, CsrfToken, EmptyExtraTokenFields,
+    StandardTokenResponse,
+};
 use serde::Deserialize;
 use veil::Redact;
+
+use super::{
+    errors::{MinecraftTokenError, OauthError},
+    MSauth,
+};
 
 #[derive(Redact, Deserialize)]
 pub struct OauthCode {
@@ -71,7 +82,51 @@ pub struct MinecraftToken {
     pub username: String,
     #[redact]
     pub access_token: String,
+    #[redact]
+    pub ms_token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
     pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug)]
+pub enum RefreshError {
+    Oauth,
+    MinecraftTokenError,
+}
+
+impl Error for RefreshError {}
+
+impl Display for RefreshError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Oauth => "Oauth error",
+            Self::MinecraftTokenError => "Minecraft Token error",
+        })
+    }
+}
+
+impl MinecraftToken {
+    #[must_use]
+    pub fn is_expired(&self) -> bool {
+        self.expires_at < Utc::now()
+    }
+
+    /// Refreshes the token, returning an error if the refresh fails.
+    ///
+    /// # Errors
+    /// Returns an error if the refresh fails.
+    pub async fn refresh(&mut self, oauth: &MSauth) -> Result<(), RefreshError> {
+        let new_ms_token = oauth
+            .refresh_ms_access_token(&self.ms_token)
+            .await
+            .change_context(RefreshError::Oauth)?;
+
+        *self = oauth
+            .get_minecraft_token(new_ms_token)
+            .await
+            .change_context(RefreshError::MinecraftTokenError)?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -96,14 +151,4 @@ pub struct Skin {
     url: String,
     variant: String,
     alias: Option<String>,
-}
-
-impl From<MinecraftResponse> for MinecraftToken {
-    fn from(val: MinecraftResponse) -> Self {
-        Self {
-            username: val.username,
-            access_token: val.access_token,
-            expires_at: Utc::now() + Duration::seconds(val.expires_in),
-        }
-    }
 }

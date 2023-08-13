@@ -139,7 +139,7 @@ async fn get_code(Query(code): Query<OauthCode>, State(state): State<AppState>) 
 
     let ms_token = state
         .oauth
-        .refresh_ms_access_token(ms_token)
+        .refresh_ms_access_token(&ms_token)
         .await
         .expect("To be able to refresh token");
 

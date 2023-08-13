@@ -149,6 +149,7 @@ async fn main() {
     let profile = oauth.get_minecraft_profile(token).await.unwrap();
 
     let auth_details = AuthenticationDetails {
+        authenticator: oauth,
         auth_details: token.clone(),
         minecraft_profile: profile,
         is_demo_user: false,
@@ -160,7 +161,7 @@ async fn main() {
         _ => java_home.join("bin").join("java"),
     };
 
-    let launcher = LauncherBuilder::default()
+    let mut launcher = LauncherBuilder::default()
         .authentication_details(auth_details)
         .custom_resolution(None)
         .jar_path(manifest_dir.join(format!("{}.jar", latest.id())))
@@ -258,7 +259,7 @@ async fn main() {
 
     info!("Done downloading files. Launching the game");
 
-    let game_manager = launcher.launch().unwrap();
+    let game_manager = launcher.launch().await.unwrap();
 
     let stdout_task = tokio::spawn(async move {
         let mut lines = game_manager.stdout.lines();

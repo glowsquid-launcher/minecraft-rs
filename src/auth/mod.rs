@@ -1,3 +1,4 @@
+use chrono::{Duration, Utc};
 use error_stack::{ensure, IntoReport, Result, ResultExt};
 use oauth2::{
     basic::{BasicClient, BasicTokenType},
@@ -138,9 +139,9 @@ impl MSauth {
     /// Errors if the token is invalid or one of the requests fails.
     /// This can happen if the user does not own minecraft of if the token is expired
     #[tracing::instrument]
-    pub async fn get_minecraft_token<T: oauth2::TokenType>(
+    pub async fn get_minecraft_token(
         &self,
-        ms_token: impl TokenResponse<T> + Send,
+        ms_token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
     ) -> Result<MinecraftToken, MinecraftTokenError> {
         debug!("Attempting to get minecraft token from microsoft token");
         let access_token = ms_token.access_token();
@@ -195,13 +196,19 @@ impl MSauth {
         trace!("Recieved {minecraft_request:#?}");
         debug!("Parsing minecraft token request");
 
-        Ok(minecraft_request
+        let response = minecraft_request
             .json::<MinecraftResponse>()
             .await
             .into_report()
             .attach_printable("Failed to deserialize body")
-            .change_context(MinecraftTokenError::DeserializeError)?
-            .into())
+            .change_context(MinecraftTokenError::DeserializeError)?;
+
+        Ok(MinecraftToken {
+            access_token: response.access_token,
+            username: response.username,
+            ms_token,
+            expires_at: Utc::now() + Duration::seconds(response.expires_in),
+        })
     }
 
     /// Requests a microsoft access token
@@ -254,7 +261,7 @@ impl MSauth {
     #[tracing::instrument]
     pub async fn refresh_ms_access_token<T: oauth2::TokenType>(
         &self,
-        response: impl TokenResponse<T> + Send,
+        response: &(impl TokenResponse<T> + Send),
     ) -> Result<StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>, OauthError> {
         let refresh_token = response
             .refresh_token()
