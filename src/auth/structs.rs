@@ -9,10 +9,7 @@ use oauth2::{
 use serde::Deserialize;
 use veil::Redact;
 
-use super::{
-    errors::{MinecraftTokenError, OauthError},
-    MSauth,
-};
+use super::MSauth;
 
 #[derive(Redact, Deserialize)]
 pub struct OauthCode {

@@ -259,9 +259,9 @@ impl MSauth {
     /// Errors if the refresh token does not exist or the request fails.
     /// This can happen if the refresh token has been revoked by the user
     #[tracing::instrument]
-    pub async fn refresh_ms_access_token<T: oauth2::TokenType>(
+    pub async fn refresh_ms_access_token(
         &self,
-        response: &(impl TokenResponse<T> + Send),
+        response: &StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
     ) -> Result<StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>, OauthError> {
         let refresh_token = response
             .refresh_token()
