@@ -7,7 +7,7 @@ use tokio::{
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
 };
 
-use crate::{DownloadError, DownloadMessage, Downloader};
+use crate::downloader::{DownloadError, DownloadMessage, Downloader};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Assets {

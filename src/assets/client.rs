@@ -17,7 +17,7 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::{DownloadError, DownloadMessage, Downloader};
+use crate::downloader::{DownloadError, DownloadMessage, Downloader};
 
 use super::asset_index::Assets;
 
@@ -112,6 +112,9 @@ pub struct Manifest {
     #[serde(rename = "type")]
     manifest_type: Type,
     logging: Option<Logging>,
+    compliance_level: Option<u8>,
+    /// What to merge from. During a merge, it will take the current manifest and merge this manifest into it
+    inherits_from: Option<PathBuf>,
 }
 
 impl Manifest {
@@ -738,10 +741,12 @@ impl JvmClassRule {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Arguments {
-    game: Vec<Game>,
-    jvm: Vec<Jvm>,
+    #[serde(default)]
+    pub(crate) game: Vec<Game>,
+    #[serde(default)]
+    pub(crate) jvm: Vec<Jvm>,
 }
 
 impl Arguments {
@@ -851,10 +856,7 @@ impl Downloader for LibraryDownloader {
         receiver
     }
 
-    async fn download(
-        &self,
-        item: Self::DownloadItem,
-    ) -> error_stack::Result<(), crate::DownloadError> {
+    async fn download(&self, item: Self::DownloadItem) -> error_stack::Result<(), DownloadError> {
         item.download(
             self.libraries_directory.clone(),
             &self.client,
@@ -870,7 +872,7 @@ impl Downloader for LibraryDownloader {
             .change_context(DownloadError::ChannelError)
     }
 
-    async fn download_all(self: Arc<Self>) -> error_stack::Result<(), crate::DownloadError> {
+    async fn download_all(self: Arc<Self>) -> error_stack::Result<(), DownloadError> {
         let new_self = self.clone();
         let libraries = new_self
             .libraries

@@ -16,8 +16,8 @@ use copper::{
         structs::{MinecraftToken, OauthCode},
         MSauth,
     },
+    downloader::{DownloadMessage, Downloader},
     launcher::{self, AuthenticationDetails, LauncherBuilder, RamSize},
-    DownloadMessage, Downloader,
 };
 use error_stack::Report;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};

@@ -1,7 +1,7 @@
 use derive_builder::Builder;
 use error_stack::{IntoReport, Result, ResultExt};
 use std::{
-    error::Error,
+    error::Error as ErrorTrait,
     fmt::{self, Display, Formatter},
     path::PathBuf,
     process::{ExitStatus, Stdio},
@@ -27,8 +27,8 @@ use crate::{
         structs::{MinecraftProfile, MinecraftToken},
         MSauth,
     },
+    downloader::{DownloadError, DownloadMessage, Downloader as DownloaderTrait},
     parser::{JvmArgs, MinecraftArgs},
-    DownloadError, DownloadMessage, Downloader as DownloaderTrait,
 };
 
 #[derive(Debug, Clone)]
@@ -122,14 +122,14 @@ pub struct Launcher {
 }
 
 #[derive(Debug)]
-pub enum LauncherError {
+pub enum Error {
     CannotGetStdout,
     CannotGetStderr,
     ProcessError,
     AuthError,
 }
 
-impl Display for LauncherError {
+impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::CannotGetStdout => "Cannot get stdout",
@@ -140,7 +140,7 @@ impl Display for LauncherError {
     }
 }
 
-impl Error for LauncherError {}
+impl ErrorTrait for Error {}
 
 /// High-level API
 impl Launcher {
@@ -149,7 +149,7 @@ impl Launcher {
     /// # Errors
     /// If the process cannot be spawned, or the stdout/stderr cannot be read
     #[tracing::instrument(skip(self))]
-    pub async fn launch(&mut self) -> Result<GameOutput, LauncherError> {
+    pub async fn launch(&mut self) -> Result<GameOutput, Error> {
         debug!("Launching game");
 
         if self.authentication_details.auth_details.is_expired() {
@@ -157,7 +157,7 @@ impl Launcher {
                 .auth_details
                 .refresh(&self.authentication_details.authenticator)
                 .await
-                .change_context(LauncherError::AuthError)?;
+                .change_context(Error::AuthError)?;
         }
 
         let mut game_args = MinecraftArgs::new(self, &self.manifest).parse_minecraft_args();
@@ -178,17 +178,11 @@ impl Launcher {
             .args(&mut game_args)
             .spawn()
             .into_report()
-            .change_context(LauncherError::ProcessError)?;
+            .change_context(Error::ProcessError)?;
 
-        let stdout = process
-            .stdout
-            .take()
-            .ok_or(LauncherError::CannotGetStdout)?;
+        let stdout = process.stdout.take().ok_or(Error::CannotGetStdout)?;
 
-        let stderr = process
-            .stderr
-            .take()
-            .ok_or(LauncherError::CannotGetStderr)?;
+        let stderr = process.stderr.take().ok_or(Error::CannotGetStderr)?;
 
         let out_reader = BufReader::new(stdout);
         let err_reader = BufReader::new(stderr);

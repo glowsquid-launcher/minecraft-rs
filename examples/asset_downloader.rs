@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use copper::{
     assets::{asset_index::AssetDownloader, version},
-    DownloadMessage, Downloader,
+    downloader::{DownloadMessage, Downloader},
 };
 use error_stack::Report;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
