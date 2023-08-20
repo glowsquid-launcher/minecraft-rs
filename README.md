@@ -1,4 +1,5 @@
 # copper
+# ARCHIVED: now in https://github.com/glowsquid-launcher/glowsquid/tree/dev/libs/copper
 
 ## A rust minecraft launcher
 
