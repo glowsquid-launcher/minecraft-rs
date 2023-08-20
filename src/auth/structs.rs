@@ -1,119 +1,151 @@
-use serde::{Deserialize, Serialize};
+use std::{error::Error, fmt::Display};
 
-use crate::errors::{InternalAuthTokenError, InternalReqwestError};
+use chrono::{DateTime, Utc};
+use error_stack::{Result, ResultExt};
+use oauth2::{
+    basic::BasicTokenType, AuthorizationCode, CsrfToken, EmptyExtraTokenFields,
+    StandardTokenResponse,
+};
+use serde::Deserialize;
+use veil::Redact;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DeviceCode {
-    pub device_code: String,
-    pub user_code: String,
-    pub verification_uri: String,
-    pub expires_in: u32,
-    pub interval: u32,
-    pub message: String,
+use super::MSauth;
+
+#[derive(Redact, Deserialize)]
+pub struct OauthCode {
+    #[redact]
+    code: String,
+    state: String,
 }
 
-#[derive(Debug, Serialize)]
-pub enum AuthTokenError {
-    ExpectedError(InternalAuthTokenError),
-    ReqwestError(InternalReqwestError),
+impl OauthCode {
+    #[must_use]
+    pub fn validate(&self, csrf: &CsrfToken) -> bool {
+        &self.state == csrf.secret()
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AuthToken {
-    pub token_type: String,
-    pub scope: String,
-    pub expires_in: u32,
-    pub access_token: String,
-    pub refresh_token: String,
+impl From<OauthCode> for AuthorizationCode {
+    fn from(val: OauthCode) -> Self {
+        Self::new(val.code)
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct XboxLiveResponse;
+pub struct XstsResponse;
+
+#[derive(Redact, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct XboxToken {
-    pub issue_instant: String,
-    pub not_after: String,
-    /// important. This is your XBL token
-    pub token: String,
-    pub display_claims: DisplayClaims,
+pub struct XboxResponse<T> {
+    #[serde(skip)]
+    marker: std::marker::PhantomData<T>,
+    #[redact]
+    token: String,
+    display_claims: DisplayClaims,
 }
 
-pub type XstsToken = XboxToken;
+impl<T> XboxResponse<T> {
+    #[must_use]
+    pub fn token(&self) -> &str {
+        &self.token
+    }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DisplayClaims {
-    pub xui: Vec<Xui>,
+    #[must_use]
+    pub fn uhs(&self) -> Option<&str> {
+        self.display_claims.xui.first().map(|xui| xui.uhs.as_str())
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Xui {
-    /// Important
-    pub uhs: String,
+#[derive(Debug, Deserialize)]
+struct DisplayClaims {
+    xui: Vec<Xui>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-/// This is the token you need to use for launching minecraft. Note that before you even attempting to launch the game, you should make sure the account even owns Minecraft
+#[derive(Debug, Deserialize)]
+struct Xui {
+    uhs: String,
+}
+
+#[derive(Redact, Deserialize)]
+pub(in crate::auth) struct MinecraftResponse {
+    pub username: String,
+    #[redact]
+    pub access_token: String,
+    pub expires_in: i64,
+}
+
+#[derive(Redact, Clone)]
 pub struct MinecraftToken {
-    /// This is NOT your Minecraft username, nor your Minecraft UUID
     pub username: String,
-    /// TODO: figure out type of this
-    pub roles: Vec<String>,
-    /// This is your Minecraft access token, keep in mind that this will expire soon
+    #[redact]
     pub access_token: String,
-    /// Usually `Bearer`
-    pub token_type: String,
-    /// This is (in seconds) how long your access token will last
-    pub expires_in: u32,
+    #[redact]
+    pub ms_token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
+    pub expires_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MinecraftProductAttachment {
-    pub items: Vec<MinecraftProductAttachmentItem>,
-    pub signature: String,
-    #[serde(rename = "keyId")]
-    pub key_id: String,
+#[derive(Debug)]
+pub enum RefreshError {
+    Oauth,
+    MinecraftTokenError,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MinecraftProductAttachmentItem {
-    pub name: String,
-    pub signature: String,
+impl Error for RefreshError {}
+
+impl Display for RefreshError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Oauth => "Oauth error",
+            Self::MinecraftTokenError => "Minecraft Token error",
+        })
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct JWTEntitlements {
-    pub entitlements: Vec<JWTEntitlement>,
+impl MinecraftToken {
+    #[must_use]
+    pub fn is_expired(&self) -> bool {
+        self.expires_at < Utc::now()
+    }
+
+    /// Refreshes the token, returning an error if the refresh fails.
+    ///
+    /// # Errors
+    /// Returns an error if the refresh fails.
+    pub async fn refresh(&mut self, oauth: &MSauth) -> Result<(), RefreshError> {
+        let new_ms_token = oauth
+            .refresh_ms_access_token(&self.ms_token)
+            .await
+            .change_context(RefreshError::Oauth)?;
+
+        *self = oauth
+            .get_minecraft_token(new_ms_token)
+            .await
+            .change_context(RefreshError::MinecraftTokenError)?;
+
+        Ok(())
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct JWTEntitlement {
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MinecraftProfile {
-    pub id: String,
-    pub name: String,
-    pub skins: Vec<Skin>,
-    pub capes: Vec<Cape>,
+    id: String,
+    name: String,
+    skins: Vec<Skin>,
+    capes: Vec<Option<serde_json::Value>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+impl MinecraftProfile {
+    #[must_use]
+    pub fn id(&self) -> &str {
+        self.id.as_ref()
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Skin {
-    pub id: String,
-    pub state: String,
-    pub url: String,
-    pub variant: Option<String>,
-    pub alias: Option<String>,
-}
-
-pub type Cape = Skin;
-
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct AuthData {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub uuid: String,
-    pub username: String,
-    pub xuid: String,
-    pub expires_at: String,
+    id: String,
+    state: String,
+    url: String,
+    variant: String,
+    alias: Option<String>,
 }
